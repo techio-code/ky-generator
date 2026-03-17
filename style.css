@@ -1,0 +1,773 @@
+/* ================================
+   現場KYジェネレーター - スタイル
+   カラー：安全色（黄色×黒）
+   ================================ */
+
+:root {
+  --yellow: #FFD600;
+  --yellow-light: #FFF8E1;
+  --yellow-dark: #F9A825;
+  --black: #1A1A1A;
+  --dark-gray: #2D2D2D;
+  --gray: #666;
+  --light-gray: #F5F5F5;
+  --white: #FFFFFF;
+  --danger: #E53935;
+  --danger-bg: #FFEBEE;
+  --warning: #FF8F00;
+  --warning-bg: #FFF3E0;
+  --action: #2E7D32;
+  --action-bg: #E8F5E9;
+  --weather-blue: #1565C0;
+  --weather-bg: #E3F2FD;
+}
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  font-family: 'Noto Sans JP', sans-serif;
+  background: var(--light-gray);
+  color: var(--black);
+  line-height: 1.7;
+  min-height: 100vh;
+}
+
+/* ヘッダー */
+.header {
+  background: var(--black);
+  color: var(--yellow);
+  padding: 24px 0;
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  box-shadow: 0 2px 12px rgba(0,0,0,0.3);
+}
+
+.header-inner {
+  max-width: 800px;
+  margin: 0 auto;
+  padding: 0 20px;
+  text-align: center;
+}
+
+.logo {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+}
+
+.logo-icon {
+  font-size: 32px;
+}
+
+.logo h1 {
+  font-size: 24px;
+  font-weight: 900;
+  letter-spacing: 2px;
+}
+
+.header-sub {
+  font-size: 13px;
+  color: #AAA;
+  margin-top: 4px;
+}
+
+/* メイン */
+.main {
+  max-width: 800px;
+  margin: 0 auto;
+  padding: 24px 20px 60px;
+}
+
+/* ステップカード */
+.step-card {
+  background: var(--white);
+  border-radius: 16px;
+  padding: 28px;
+  margin-bottom: 20px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+  position: relative;
+  border: 2px solid transparent;
+  transition: border-color 0.3s;
+}
+
+.step-card:hover {
+  border-color: var(--yellow);
+}
+
+.step-badge {
+  display: inline-block;
+  background: var(--yellow);
+  color: var(--black);
+  font-size: 12px;
+  font-weight: 900;
+  padding: 4px 12px;
+  border-radius: 20px;
+  letter-spacing: 1px;
+  margin-bottom: 12px;
+}
+
+.step-title {
+  font-size: 18px;
+  font-weight: 700;
+  margin-bottom: 16px;
+}
+
+/* 日付選択 */
+.date-selector {
+  margin-top: 16px;
+}
+
+.date-label {
+  font-size: 14px;
+  font-weight: 700;
+  margin-bottom: 10px;
+}
+
+.date-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 6px;
+}
+
+@media (max-width: 600px) {
+  .date-grid {
+    grid-template-columns: repeat(4, 1fr);
+  }
+}
+
+.date-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 10px 4px;
+  background: var(--light-gray);
+  border: 2px solid transparent;
+  border-radius: 10px;
+  cursor: pointer;
+  transition: all 0.2s;
+  font-family: 'Noto Sans JP', sans-serif;
+}
+
+.date-btn:hover {
+  background: var(--yellow-light);
+  border-color: var(--yellow);
+}
+
+.date-btn.selected {
+  background: var(--yellow);
+  border-color: var(--yellow-dark);
+  box-shadow: 0 2px 8px rgba(255, 214, 0, 0.4);
+}
+
+.date-btn.today {
+  border-color: var(--weather-blue);
+}
+
+.date-btn.today::after {
+  content: '今日';
+  font-size: 9px;
+  color: var(--weather-blue);
+  font-weight: 700;
+}
+
+.date-day {
+  font-size: 11px;
+  color: var(--gray);
+  font-weight: 700;
+}
+
+.date-day.sun {
+  color: var(--danger);
+}
+
+.date-day.sat {
+  color: var(--weather-blue);
+}
+
+.date-num {
+  font-size: 18px;
+  font-weight: 900;
+  color: var(--black);
+}
+
+.date-month {
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--warning);
+  background: var(--warning-bg);
+  padding: 1px 6px;
+  border-radius: 8px;
+  line-height: 1.4;
+}
+
+.date-weather-icon {
+  font-size: 16px;
+}
+
+/* カテゴリタブ */
+.category-tabs {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 20px;
+}
+
+.category-tab {
+  flex: 1;
+  padding: 12px 16px;
+  font-size: 14px;
+  font-weight: 700;
+  font-family: 'Noto Sans JP', sans-serif;
+  border: 2px solid #DDD;
+  border-radius: 12px;
+  background: var(--white);
+  color: var(--gray);
+  cursor: pointer;
+  transition: all 0.2s;
+  text-align: center;
+}
+
+.category-tab:hover {
+  border-color: var(--yellow);
+  background: var(--yellow-light);
+}
+
+.category-tab.active {
+  background: var(--black);
+  color: var(--yellow);
+  border-color: var(--black);
+}
+
+.category-desc {
+  font-size: 13px;
+  color: var(--gray);
+  margin-bottom: 16px;
+  padding-left: 4px;
+}
+
+.work-group-title {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--dark-gray);
+  margin: 16px 0 10px;
+  padding-bottom: 6px;
+  border-bottom: 2px solid var(--yellow);
+}
+
+.work-group-title:first-of-type {
+  margin-top: 0;
+}
+
+.work-category {
+  transition: all 0.3s;
+}
+
+/* セレクトボックス */
+.select-wrapper {
+  position: relative;
+}
+
+.select-wrapper select {
+  width: 100%;
+  padding: 14px 18px;
+  font-size: 16px;
+  font-family: 'Noto Sans JP', sans-serif;
+  border: 2px solid #DDD;
+  border-radius: 12px;
+  background: var(--white);
+  color: var(--black);
+  appearance: none;
+  cursor: pointer;
+  transition: border-color 0.3s;
+}
+
+.select-wrapper select:focus {
+  outline: none;
+  border-color: var(--yellow);
+}
+
+.select-wrapper::after {
+  content: '▼';
+  position: absolute;
+  right: 16px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--gray);
+  pointer-events: none;
+  font-size: 12px;
+}
+
+/* 天気表示 */
+.weather-display {
+  margin-top: 16px;
+  padding: 20px;
+  background: var(--weather-bg);
+  border-radius: 12px;
+  transition: all 0.3s;
+}
+
+.weather-loading {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  color: var(--weather-blue);
+}
+
+.spinner {
+  width: 24px;
+  height: 24px;
+  border: 3px solid var(--weather-blue);
+  border-top-color: transparent;
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+.weather-main {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.weather-icon {
+  font-size: 48px;
+}
+
+.weather-text {
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--black);
+}
+
+.weather-temp {
+  font-size: 14px;
+  color: var(--gray);
+  margin-top: 2px;
+}
+
+.weather-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.weather-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 12px;
+  border-radius: 20px;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.weather-tag.risk-high {
+  background: var(--danger-bg);
+  color: var(--danger);
+}
+
+.weather-tag.risk-mid {
+  background: var(--warning-bg);
+  color: var(--warning);
+}
+
+.weather-tag.risk-low {
+  background: var(--action-bg);
+  color: var(--action);
+}
+
+/* 作業選択グリッド */
+.work-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+}
+
+@media (max-width: 600px) {
+  .work-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+.work-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 16px 8px;
+  background: var(--light-gray);
+  border: 2px solid transparent;
+  border-radius: 12px;
+  cursor: pointer;
+  transition: all 0.2s;
+  font-family: 'Noto Sans JP', sans-serif;
+}
+
+.work-btn:hover {
+  background: var(--yellow-light);
+  border-color: var(--yellow);
+  transform: translateY(-2px);
+}
+
+.work-btn.selected {
+  background: var(--yellow);
+  border-color: var(--yellow-dark);
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(255, 214, 0, 0.4);
+}
+
+.work-icon {
+  font-size: 28px;
+}
+
+.work-name {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--black);
+  text-align: center;
+}
+
+/* 生成ボタン */
+.generate-btn {
+  width: 100%;
+  padding: 18px;
+  font-size: 18px;
+  font-weight: 900;
+  font-family: 'Noto Sans JP', sans-serif;
+  background: var(--dark-gray);
+  color: #888;
+  border: none;
+  border-radius: 12px;
+  cursor: not-allowed;
+  transition: all 0.3s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+
+.generate-btn:not(:disabled) {
+  background: var(--yellow);
+  color: var(--black);
+  cursor: pointer;
+  box-shadow: 0 4px 16px rgba(255, 214, 0, 0.4);
+}
+
+.generate-btn:not(:disabled):hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 24px rgba(255, 214, 0, 0.5);
+}
+
+.generate-btn:not(:disabled):active {
+  transform: translateY(0);
+}
+
+.generate-icon {
+  font-size: 22px;
+}
+
+.generate-note {
+  text-align: center;
+  font-size: 13px;
+  color: var(--gray);
+  margin-top: 8px;
+}
+
+/* 結果カード */
+.result-card {
+  background: var(--white);
+  border-radius: 16px;
+  padding: 32px;
+  margin-top: 24px;
+  box-shadow: 0 4px 20px rgba(0,0,0,0.1);
+  border: 3px solid var(--yellow);
+  animation: slideUp 0.5s ease-out;
+}
+
+@keyframes slideUp {
+  from {
+    opacity: 0;
+    transform: translateY(30px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.result-header {
+  text-align: center;
+  margin-bottom: 24px;
+  padding-bottom: 20px;
+  border-bottom: 2px dashed #EEE;
+}
+
+.result-title {
+  font-size: 22px;
+  font-weight: 900;
+}
+
+.result-meta {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 12px;
+  margin-top: 10px;
+  font-size: 14px;
+  color: var(--gray);
+}
+
+.result-meta span {
+  background: var(--light-gray);
+  padding: 4px 12px;
+  border-radius: 20px;
+}
+
+/* 天気アラート */
+.weather-alert {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 16px 20px;
+  border-radius: 12px;
+  margin-bottom: 24px;
+}
+
+.weather-alert.level-high {
+  background: var(--danger-bg);
+  border-left: 4px solid var(--danger);
+}
+
+.weather-alert.level-mid {
+  background: var(--warning-bg);
+  border-left: 4px solid var(--warning);
+}
+
+.alert-icon {
+  font-size: 24px;
+  flex-shrink: 0;
+}
+
+.alert-content h3 {
+  font-size: 15px;
+  font-weight: 700;
+  margin-bottom: 4px;
+}
+
+.alert-content p {
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+/* KYセクション */
+.ky-section {
+  margin-bottom: 24px;
+}
+
+.ky-section-title {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 16px;
+  font-weight: 700;
+  margin-bottom: 12px;
+}
+
+.ky-badge {
+  display: inline-block;
+  padding: 3px 10px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 900;
+  letter-spacing: 1px;
+}
+
+.ky-badge.danger {
+  background: var(--danger);
+  color: white;
+}
+
+.ky-badge.weather {
+  background: var(--weather-blue);
+  color: white;
+}
+
+.ky-badge.action {
+  background: var(--action);
+  color: white;
+}
+
+.ky-list {
+  list-style: none;
+}
+
+.ky-list li {
+  padding: 12px 16px;
+  margin-bottom: 8px;
+  border-radius: 10px;
+  font-size: 14px;
+  line-height: 1.6;
+  position: relative;
+  padding-left: 40px;
+}
+
+.ky-list li::before {
+  position: absolute;
+  left: 12px;
+  top: 12px;
+  font-size: 16px;
+}
+
+.ky-section:nth-child(2) .ky-list li {
+  background: var(--danger-bg);
+}
+
+.ky-section:nth-child(2) .ky-list li::before {
+  content: '🔴';
+}
+
+.ky-section:nth-child(3) .ky-list li {
+  background: var(--warning-bg);
+}
+
+.ky-section:nth-child(3) .ky-list li::before {
+  content: '🌧️';
+}
+
+.ky-section:nth-child(4) .ky-list li {
+  background: var(--action-bg);
+}
+
+.ky-section:nth-child(4) .ky-list li::before {
+  content: '✅';
+}
+
+/* 安全目標 */
+.safety-goal {
+  text-align: center;
+  padding: 24px;
+  background: linear-gradient(135deg, var(--yellow), var(--yellow-dark));
+  border-radius: 12px;
+  margin-bottom: 24px;
+}
+
+.safety-goal h3 {
+  font-size: 16px;
+  margin-bottom: 8px;
+}
+
+.goal-text {
+  font-size: 20px;
+  font-weight: 900;
+  color: var(--black);
+  line-height: 1.5;
+}
+
+/* アクションボタン */
+.result-actions {
+  display: flex;
+  gap: 12px;
+}
+
+.action-btn {
+  flex: 1;
+  padding: 14px;
+  font-size: 15px;
+  font-weight: 700;
+  font-family: 'Noto Sans JP', sans-serif;
+  border: 2px solid;
+  border-radius: 12px;
+  cursor: pointer;
+  transition: all 0.2s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+}
+
+.copy-btn {
+  background: var(--black);
+  color: var(--yellow);
+  border-color: var(--black);
+}
+
+.copy-btn:hover {
+  background: var(--dark-gray);
+}
+
+.copy-btn.copied {
+  background: var(--action);
+  border-color: var(--action);
+  color: white;
+}
+
+.reset-btn {
+  background: var(--white);
+  color: var(--black);
+  border-color: #DDD;
+}
+
+.reset-btn:hover {
+  border-color: var(--yellow);
+  background: var(--yellow-light);
+}
+
+/* フッター */
+.footer {
+  text-align: center;
+  padding: 32px 20px;
+  color: var(--gray);
+  font-size: 13px;
+}
+
+.footer-note {
+  font-size: 11px;
+  margin-top: 4px;
+}
+
+.footer-credit {
+  margin-top: 8px;
+}
+
+.footer a {
+  color: var(--weather-blue);
+  text-decoration: none;
+}
+
+/* ユーティリティ */
+.hidden {
+  display: none !important;
+}
+
+/* スマホ対応 */
+@media (max-width: 600px) {
+  .logo h1 {
+    font-size: 20px;
+  }
+
+  .step-card {
+    padding: 20px;
+  }
+
+  .result-card {
+    padding: 20px;
+  }
+
+  .result-actions {
+    flex-direction: column;
+  }
+
+  .goal-text {
+    font-size: 17px;
+  }
+}
