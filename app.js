@@ -1,6 +1,6 @@
 // ================================
-// 現場KYジェネレーター - メインロジック
-// 気象庁API連動型 危険予知活動シート自動生成
+// 建設業AI安全書類ジェネレーター
+// Claude API連動 + 気象庁API連動
 // ================================
 
 // --- 都道府県コード一覧 ---
@@ -54,7 +54,7 @@ const REGIONS = [
   { code: '471000', name: '沖縄県' },
 ];
 
-// --- 作業ごとの危険ポイント ---
+// --- 作業ごとの危険ポイント（テンプレートフォールバック用） ---
 const WORK_DANGERS = {
   scaffold: {
     name: '足場作業',
@@ -260,7 +260,6 @@ const WORK_DANGERS = {
       '軒先・ケラバには手すりを設置する',
     ],
   },
-  // --- ゼネコン追加作業 ---
   formwork: {
     name: '型枠工事',
     dangers: [
@@ -380,7 +379,6 @@ const WORK_DANGERS = {
       '搬入車両の誘導員を配置する',
     ],
   },
-  // --- サブコン追加作業 ---
   electrical_panel: {
     name: '分電盤・受変電',
     dangers: [
@@ -653,7 +651,6 @@ const WEATHER_RISKS = {
       '30分に1回の水分補給（塩分含む）を徹底する',
       '日除けテント・送風機を設置する',
       '体調不良者が出た場合の救急体制を確認する',
-      '午前10時〜午後3時は特に注意し、適宜休憩を入れる',
     ],
     alert: {
       level: 'high',
@@ -752,19 +749,130 @@ const SAFETY_GOALS = {
 let currentWeather = null;
 let selectedWork = null;
 let selectedRegionName = '';
-let weeklyForecasts = []; // 週間予報データ
-let selectedDateIndex = 0; // 選択された日付のインデックス
+let weeklyForecasts = [];
+let selectedDateIndex = 0;
+let apiKey = '';
+let useAi = false;
 
 // --- 初期化 ---
 document.addEventListener('DOMContentLoaded', () => {
+  loadApiKey();
+  initApiKeyModal();
+  initDocTabs();
   initRegionSelect();
   initCategoryTabs();
   initWorkButtons();
   initGenerateButton();
-  initActionButtons();
+  initKyActionButtons();
+  initEducationPanel();
+  initSpeechPanel();
 });
 
-// --- 地域セレクトボックスの初期化 ---
+// ================================
+// APIキー管理
+// ================================
+
+function loadApiKey() {
+  const saved = localStorage.getItem('ky_claude_api_key');
+  if (saved) {
+    apiKey = saved;
+    useAi = true;
+    updateApiBadge();
+  }
+}
+
+function saveApiKeyToStorage(key) {
+  apiKey = key;
+  useAi = true;
+  localStorage.setItem('ky_claude_api_key', key);
+  updateApiBadge();
+}
+
+function updateApiBadge() {
+  const badge = document.getElementById('apiBadge');
+  if (useAi && apiKey) {
+    badge.textContent = '🤖 AIモード';
+    badge.classList.add('badge-ai');
+  } else {
+    badge.textContent = 'テンプレートモード';
+    badge.classList.remove('badge-ai');
+  }
+}
+
+function initApiKeyModal() {
+  const modal = document.getElementById('apiKeyModal');
+  const input = document.getElementById('apiKeyInput');
+  const toggleBtn = document.getElementById('toggleApiKey');
+  const saveBtn = document.getElementById('saveApiKey');
+  const skipBtn = document.getElementById('skipApiKey');
+  const changeBtn = document.getElementById('changeApiKey');
+
+  // APIキー未保存なら初回モーダルを表示
+  if (!localStorage.getItem('ky_claude_api_key')) {
+    modal.classList.remove('hidden');
+  }
+
+  // パスワード表示切替
+  toggleBtn.addEventListener('click', () => {
+    if (input.type === 'password') {
+      input.type = 'text';
+      toggleBtn.textContent = '隠す';
+    } else {
+      input.type = 'password';
+      toggleBtn.textContent = '表示';
+    }
+  });
+
+  // 保存
+  saveBtn.addEventListener('click', () => {
+    const key = input.value.trim();
+    if (!key || !key.startsWith('sk-ant-')) {
+      input.style.borderColor = '#E53935';
+      input.placeholder = 'sk-ant- で始まるキーを入力してください';
+      return;
+    }
+    saveApiKeyToStorage(key);
+    modal.classList.add('hidden');
+  });
+
+  // スキップ（テンプレートモード）
+  skipBtn.addEventListener('click', () => {
+    useAi = false;
+    modal.classList.add('hidden');
+    updateApiBadge();
+    // スキップ選択をセッション中記憶
+    sessionStorage.setItem('ky_api_skipped', '1');
+  });
+
+  // APIキー変更ボタン
+  changeBtn.addEventListener('click', () => {
+    input.value = apiKey || '';
+    modal.classList.remove('hidden');
+  });
+}
+
+// ================================
+// 書類タブ切替
+// ================================
+
+function initDocTabs() {
+  const tabs = document.querySelectorAll('.doc-tab');
+  tabs.forEach(tab => {
+    tab.addEventListener('click', () => {
+      tabs.forEach(t => t.classList.remove('active'));
+      tab.classList.add('active');
+
+      const docType = tab.dataset.doc;
+      document.querySelectorAll('.doc-panel').forEach(p => p.classList.add('hidden'));
+      document.getElementById(`panel-${docType}`).classList.remove('hidden');
+    });
+  });
+}
+
+// ================================
+// 気象庁API連携（既存ロジック維持）
+// ================================
+
 function initRegionSelect() {
   const select = document.getElementById('regionSelect');
   REGIONS.forEach(region => {
@@ -788,7 +896,6 @@ function initRegionSelect() {
   });
 }
 
-// --- 気象庁APIから天気を取得 ---
 async function fetchWeather(regionCode) {
   const display = document.getElementById('weatherDisplay');
   const loading = document.getElementById('weatherLoading');
@@ -811,13 +918,11 @@ async function fetchWeather(regionCode) {
     const data = await response.json();
     weeklyForecasts = [];
 
-    // --- data[0]: 今日〜明後日の予報 ---
     const shortForecast = data[0];
     const shortWeathers = shortForecast.timeSeries[0].areas[0].weathers || [];
     const shortWinds = shortForecast.timeSeries[0].areas[0].winds || [];
     const shortDates = shortForecast.timeSeries[0].timeDefines || [];
 
-    // 気温データ（今日・明日）
     let shortTemps = [];
     if (shortForecast.timeSeries[2]) {
       const tempAreas = shortForecast.timeSeries[2].areas[0];
@@ -826,13 +931,11 @@ async function fetchWeather(regionCode) {
       }
     }
 
-    // 今日〜明後日を追加
     for (let i = 0; i < shortDates.length && i < shortWeathers.length; i++) {
       const date = new Date(shortDates[i]);
       let tempMin = '--';
       let tempMax = '--';
 
-      // 気温はtimeSeries[2]に2つずつ入っている（最低・最高）
       if (shortTemps.length >= (i + 1) * 2) {
         tempMin = shortTemps[i * 2] || '--';
         tempMax = shortTemps[i * 2 + 1] || '--';
@@ -850,14 +953,12 @@ async function fetchWeather(regionCode) {
       });
     }
 
-    // --- data[1]: 週間予報（4日目〜7日目） ---
     if (data[1] && data[1].timeSeries) {
       const weeklyTS = data[1].timeSeries[0];
       const weeklyDates = weeklyTS.timeDefines || [];
       const weeklyWeatherCodes = weeklyTS.areas[0].weatherCodes || [];
       const weeklyPops = weeklyTS.areas[0].pops || [];
 
-      // 週間予報の気温
       let weeklyTempMin = [];
       let weeklyTempMax = [];
       if (data[1].timeSeries[1]) {
@@ -868,7 +969,6 @@ async function fetchWeather(regionCode) {
 
       for (let i = 0; i < weeklyDates.length; i++) {
         const date = new Date(weeklyDates[i]);
-        // 既に追加済みの日付はスキップ
         const alreadyExists = weeklyForecasts.some(f =>
           f.date.toDateString() === date.toDateString()
         );
@@ -889,24 +989,18 @@ async function fetchWeather(regionCode) {
       }
     }
 
-    // 日付選択UIを生成
     buildDateSelector();
     dateSelector.classList.remove('hidden');
-
-    // 初期選択（今日）
     selectedDateIndex = 0;
     selectDate(0);
-
     loading.classList.add('hidden');
   } catch (err) {
-    console.error('Weather fetch error:', err);
     loading.classList.add('hidden');
     error.classList.remove('hidden');
     currentWeather = null;
   }
 }
 
-// --- 天気コードをテキストに変換 ---
 function weatherCodeToText(code) {
   const codeMap = {
     '100': '晴れ', '101': '晴れ時々くもり', '102': '晴れ一時雨',
@@ -925,7 +1019,6 @@ function weatherCodeToText(code) {
   return codeMap[code] || '不明';
 }
 
-// --- 天気コードからアイコンを取得 ---
 function weatherCodeToIcon(code) {
   const codeStr = String(code);
   if (codeStr.startsWith('4')) return '❄️';
@@ -936,7 +1029,6 @@ function weatherCodeToIcon(code) {
   return '🌤️';
 }
 
-// --- 日付選択UIを構築 ---
 function buildDateSelector() {
   const grid = document.getElementById('dateGrid');
   grid.innerHTML = '';
@@ -954,7 +1046,6 @@ function buildDateSelector() {
     const isToday = d.toDateString() === today.toDateString();
     if (isToday) btn.classList.add('today');
 
-    // 天気アイコン
     let icon = '🌤️';
     if (forecast.weatherCode) {
       icon = weatherCodeToIcon(forecast.weatherCode);
@@ -964,8 +1055,6 @@ function buildDateSelector() {
     }
 
     const dayClass = dayOfWeek === 0 ? 'sun' : dayOfWeek === 6 ? 'sat' : '';
-
-    // 月の変わり目 or 最初の日付には月を表示
     const showMonth = (index === 0) || (d.getDate() === 1);
     const monthLabel = showMonth ? `<span class="date-month">${d.getMonth() + 1}月</span>` : '';
 
@@ -987,7 +1076,6 @@ function buildDateSelector() {
   });
 }
 
-// --- 日付を選択して天気を更新 ---
 function selectDate(index) {
   const forecast = weeklyForecasts[index];
   if (!forecast) return;
@@ -1002,7 +1090,6 @@ function selectDate(index) {
     forecast.tempMax
   );
 
-  // 表示を更新
   document.getElementById('weatherIcon').textContent = currentWeather.icon;
   document.getElementById('weatherText').textContent = forecast.weatherText;
   document.getElementById('weatherTemp').textContent =
@@ -1010,7 +1097,6 @@ function selectDate(index) {
       ? `最低 ${forecast.tempMin}℃ / 最高 ${forecast.tempMax}℃`
       : '気温情報なし';
 
-  // タグを表示
   const tagsContainer = document.getElementById('weatherTags');
   tagsContainer.innerHTML = '';
   currentWeather.conditions.forEach(condition => {
@@ -1028,12 +1114,10 @@ function selectDate(index) {
   updateGenerateButton();
 }
 
-// --- 天気テキストを分析してリスク条件を判定 ---
 function analyzeWeather(weatherText, windText, tempMin, tempMax) {
   const conditions = [];
   let icon = '☀️';
 
-  // 天気判定
   if (weatherText.includes('大雨') || weatherText.includes('暴風雨')) {
     conditions.push('heavyRain');
     icon = '⛈️';
@@ -1054,12 +1138,10 @@ function analyzeWeather(weatherText, windText, tempMin, tempMax) {
     }
   }
 
-  // 風判定
   if (windText.includes('強') || windText.includes('非常に') || weatherText.includes('強風')) {
     conditions.push('wind');
   }
 
-  // 気温判定
   const maxTemp = parseInt(tempMax);
   const minTemp = parseInt(tempMin);
 
@@ -1079,36 +1161,31 @@ function analyzeWeather(weatherText, windText, tempMin, tempMax) {
     }
   }
 
-  // 晴れ（他に何もなければ）
   if (conditions.length === 0) {
-    if (weatherText.includes('晴')) {
-      conditions.push('clear');
-      icon = '☀️';
-    } else {
-      conditions.push('clear');
-    }
+    conditions.push('clear');
+    icon = '☀️';
   }
 
   return { icon, conditions, weatherText, tempMin, tempMax };
 }
 
-// --- カテゴリタブの初期化 ---
+// ================================
+// 作業選択
+// ================================
+
 function initCategoryTabs() {
   const tabs = document.querySelectorAll('.category-tab');
   tabs.forEach(tab => {
     tab.addEventListener('click', () => {
-      // タブの切り替え
       tabs.forEach(t => t.classList.remove('active'));
       tab.classList.add('active');
 
-      // カテゴリの表示切り替え
       const category = tab.dataset.category;
       document.querySelectorAll('.work-category').forEach(cat => {
         cat.classList.add('hidden');
       });
       document.getElementById(`category-${category}`).classList.remove('hidden');
 
-      // 選択をリセット
       document.querySelectorAll('.work-btn').forEach(b => b.classList.remove('selected'));
       selectedWork = null;
       updateGenerateButton();
@@ -1116,12 +1193,10 @@ function initCategoryTabs() {
   });
 }
 
-// --- 作業ボタンの初期化 ---
 function initWorkButtons() {
   const buttons = document.querySelectorAll('.work-btn');
   buttons.forEach(btn => {
     btn.addEventListener('click', () => {
-      // 全カテゴリの選択を解除
       document.querySelectorAll('.work-btn').forEach(b => b.classList.remove('selected'));
       btn.classList.add('selected');
       selectedWork = btn.dataset.work;
@@ -1130,14 +1205,14 @@ function initWorkButtons() {
   });
 }
 
-// --- 生成ボタンの状態更新 ---
 function updateGenerateButton() {
   const btn = document.getElementById('generateBtn');
   const note = document.getElementById('generateNote');
 
   if (currentWeather && selectedWork) {
     btn.disabled = false;
-    note.textContent = '準備OK！ ボタンを押してKY活動シートを生成しよう';
+    const modeText = (useAi && apiKey) ? '🤖 AIで生成します' : 'テンプレートで生成します';
+    note.textContent = `準備OK！ ${modeText}`;
   } else if (!currentWeather && !selectedWork) {
     note.textContent = '地域と作業内容を選択してください';
   } else if (!currentWeather) {
@@ -1147,33 +1222,245 @@ function updateGenerateButton() {
   }
 }
 
-// --- 生成ボタンのクリック ---
 function initGenerateButton() {
-  document.getElementById('generateBtn').addEventListener('click', () => {
+  document.getElementById('generateBtn').addEventListener('click', async () => {
     if (!currentWeather || !selectedWork) return;
-    generateKY();
+    if (useAi && apiKey) {
+      await generateKyWithAi();
+    } else {
+      generateKyTemplate();
+    }
   });
 }
 
-// --- KY活動シートを生成 ---
-function generateKY() {
+// ================================
+// KY生成 - AI版
+// ================================
+
+async function generateKyWithAi() {
   const workData = WORK_DANGERS[selectedWork];
   if (!workData) return;
 
   const resultCard = document.getElementById('resultCard');
   resultCard.classList.remove('hidden');
 
-  // 日付（選択された日付を使用）
+  // ヘッダー情報をセット
+  setKyHeader(workData);
+
+  // ローディング表示
+  document.getElementById('kyLoading').classList.remove('hidden');
+  document.getElementById('kyResultBody').classList.add('hidden');
+  document.getElementById('resultAiBadge').classList.remove('hidden');
+
+  resultCard.scrollIntoView({ behavior: 'smooth', block: 'start' });
+
+  const forecast = weeklyForecasts[selectedDateIndex];
+  const weatherSummary = buildWeatherSummary(forecast);
+
+  const prompt = `あなたは建設業の安全管理の専門家です。現場の職長として、本日のKY活動シートを作成してください。
+
+【作業内容】${workData.name}
+【現場の天気・気象条件】${weatherSummary}
+【地域】${selectedRegionName}
+
+以下の形式で出力してください。現場で実際に使う言葉で、具体的に書いてください。専門用語（コンクリ打設、TBM、KYKなど）は積極的に使ってください。形式的な一般論ではなく、この作業と今日の天気に特有のリスクを書いてください。
+
+===危険ポイント===
+1. （危険ポイント1）
+2. （危険ポイント2）
+3. （危険ポイント3）
+4. （危険ポイント4）
+
+===天気リスク===
+1. （天気に起因するリスク1）
+2. （天気に起因するリスク2）
+3. （天気に起因するリスク3）
+
+===重点対策===
+1. （対策1）
+2. （対策2）
+3. （対策3）
+4. （対策4）
+5. （対策5）
+
+===安全目標===
+（本日の安全目標。現場で唱和できる短いフレーズ。「ヨシ！」で締めるもの）
+
+各項目は1〜2行で簡潔に。実務に即した表現で書いてください。`;
+
+  try {
+    const result = await callClaudeApi(prompt);
+    renderKyAiResult(result);
+  } catch (err) {
+    // APIエラー時はテンプレートにフォールバック
+    document.getElementById('kyLoading').classList.add('hidden');
+    document.getElementById('kyResultBody').classList.remove('hidden');
+    document.getElementById('resultAiBadge').classList.add('hidden');
+    generateKyTemplate();
+    showErrorBanner('AI生成に失敗しました。テンプレートで表示しています。');
+  }
+}
+
+function buildWeatherSummary(forecast) {
+  if (!forecast) return '不明';
+  const parts = [forecast.weatherText];
+  if (forecast.tempMin !== '--') parts.push(`最低${forecast.tempMin}℃`);
+  if (forecast.tempMax !== '--') parts.push(`最高${forecast.tempMax}℃`);
+  if (forecast.windText) parts.push(forecast.windText);
+  // 天気リスク条件も付与
+  if (currentWeather && currentWeather.conditions.length > 0) {
+    const riskLabels = currentWeather.conditions
+      .filter(c => !['clear', 'cloudy'].includes(c))
+      .map(c => {
+        const labelMap = {
+          rain: '雨天', heavyRain: '大雨', snow: '降雪',
+          wind: '強風', hot: '猛暑（熱中症警戒）', warm: '暑さ注意', cold: '寒冷',
+        };
+        return labelMap[c] || c;
+      });
+    if (riskLabels.length > 0) parts.push(`リスク条件：${riskLabels.join('・')}`);
+  }
+  return parts.join('、');
+}
+
+function renderKyAiResult(text) {
+  document.getElementById('kyLoading').classList.add('hidden');
+  document.getElementById('kyResultBody').classList.remove('hidden');
+
+  // セクションをパース
+  const sections = {
+    dangers: [],
+    weatherRisks: [],
+    actions: [],
+    goal: '',
+  };
+
+  const lines = text.split('\n');
+  let currentSection = null;
+
+  for (const line of lines) {
+    const trimmed = line.trim();
+    if (!trimmed) continue;
+
+    if (trimmed.includes('===危険ポイント===') || trimmed.includes('危険ポイント')) {
+      currentSection = 'dangers';
+      continue;
+    }
+    if (trimmed.includes('===天気リスク===') || trimmed.includes('天気リスク')) {
+      currentSection = 'weatherRisks';
+      continue;
+    }
+    if (trimmed.includes('===重点対策===') || trimmed.includes('重点対策')) {
+      currentSection = 'actions';
+      continue;
+    }
+    if (trimmed.includes('===安全目標===') || trimmed.includes('安全目標')) {
+      currentSection = 'goal';
+      continue;
+    }
+
+    if (currentSection === 'goal') {
+      sections.goal += trimmed + ' ';
+      continue;
+    }
+
+    // 番号付きリストを抽出
+    const matched = trimmed.match(/^[\d]+[.．、。)\s]+(.+)/);
+    if (matched && currentSection) {
+      if (currentSection === 'dangers') sections.dangers.push(matched[1]);
+      else if (currentSection === 'weatherRisks') sections.weatherRisks.push(matched[1]);
+      else if (currentSection === 'actions') sections.actions.push(matched[1]);
+    }
+  }
+
+  // DOM更新
+  renderList('dangerList', sections.dangers);
+  renderList('weatherRiskList', sections.weatherRisks);
+  renderList('actionList', sections.actions);
+
+  const goalEl = document.getElementById('goalText');
+  goalEl.textContent = sections.goal.trim() || '「今日も一日、ゼロ災でいこう！ ヨシ！」';
+
+  // 天気アラートはテンプレート同様に表示
+  renderWeatherAlert();
+}
+
+function renderList(elementId, items) {
+  const el = document.getElementById(elementId);
+  el.innerHTML = '';
+  items.forEach(text => {
+    const li = document.createElement('li');
+    li.textContent = text;
+    el.appendChild(li);
+  });
+}
+
+// ================================
+// KY生成 - テンプレート版（フォールバック）
+// ================================
+
+function generateKyTemplate() {
+  const workData = WORK_DANGERS[selectedWork];
+  if (!workData) return;
+
+  const resultCard = document.getElementById('resultCard');
+  resultCard.classList.remove('hidden');
+  document.getElementById('kyLoading').classList.add('hidden');
+  document.getElementById('kyResultBody').classList.remove('hidden');
+  document.getElementById('resultAiBadge').classList.add('hidden');
+
+  setKyHeader(workData);
+  renderWeatherAlert();
+
+  // 作業の危険ポイント
+  const selectedDangers = shuffleAndPick(workData.dangers, Math.min(4, workData.dangers.length));
+  renderList('dangerList', selectedDangers);
+
+  // 天気リスク
+  const allWeatherRisks = [];
+  currentWeather.conditions.forEach(condition => {
+    const riskData = WEATHER_RISKS[condition];
+    if (riskData) allWeatherRisks.push(...riskData.risks);
+  });
+  const selectedWeatherRisks = shuffleAndPick(allWeatherRisks, Math.min(4, allWeatherRisks.length));
+  renderList('weatherRiskList', selectedWeatherRisks);
+
+  // 対策
+  const allActions = [...workData.actions];
+  currentWeather.conditions.forEach(condition => {
+    const riskData = WEATHER_RISKS[condition];
+    if (riskData) allActions.push(...riskData.actions);
+  });
+  const selectedActions = shuffleAndPick(allActions, Math.min(5, allActions.length));
+  renderList('actionList', selectedActions);
+
+  // 安全目標
+  let goalPool = [...SAFETY_GOALS.default];
+  currentWeather.conditions.forEach(condition => {
+    if (SAFETY_GOALS[condition]) {
+      goalPool = [...SAFETY_GOALS[condition], ...goalPool];
+    }
+  });
+  document.getElementById('goalText').textContent = goalPool[Math.floor(Math.random() * goalPool.length)];
+
+  setTimeout(() => {
+    document.getElementById('resultCard').scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }, 100);
+}
+
+function setKyHeader(workData) {
   const selectedForecast = weeklyForecasts[selectedDateIndex];
   const targetDate = selectedForecast ? selectedForecast.date : new Date();
   const dateStr = `${targetDate.getFullYear()}/${targetDate.getMonth() + 1}/${targetDate.getDate()}`;
   const dayNames = ['日', '月', '火', '水', '木', '金', '土'];
+
   document.getElementById('resultDate').textContent = `📅 ${dateStr}（${dayNames[targetDate.getDay()]}）`;
   document.getElementById('resultRegion').textContent = `📍 ${selectedRegionName}`;
   document.getElementById('resultWeather').textContent =
     `${currentWeather.icon} ${currentWeather.weatherText.substring(0, 15)}`;
+}
 
-  // 天気アラート
+function renderWeatherAlert() {
   const alertEl = document.getElementById('weatherAlert');
   alertEl.classList.add('hidden');
   for (const condition of currentWeather.conditions) {
@@ -1186,78 +1473,46 @@ function generateKY() {
       break;
     }
   }
-
-  // 作業の危険ポイント（ランダムに3〜4個選択）
-  const dangerList = document.getElementById('dangerList');
-  dangerList.innerHTML = '';
-  const selectedDangers = shuffleAndPick(workData.dangers, Math.min(4, workData.dangers.length));
-  selectedDangers.forEach(text => {
-    const li = document.createElement('li');
-    li.textContent = text;
-    dangerList.appendChild(li);
-  });
-
-  // 天気起因のリスク
-  const weatherRiskList = document.getElementById('weatherRiskList');
-  weatherRiskList.innerHTML = '';
-  const allWeatherRisks = [];
-  currentWeather.conditions.forEach(condition => {
-    const riskData = WEATHER_RISKS[condition];
-    if (riskData) {
-      allWeatherRisks.push(...riskData.risks);
-    }
-  });
-  const selectedWeatherRisks = shuffleAndPick(allWeatherRisks, Math.min(4, allWeatherRisks.length));
-  selectedWeatherRisks.forEach(text => {
-    const li = document.createElement('li');
-    li.textContent = text;
-    weatherRiskList.appendChild(li);
-  });
-
-  // 対策
-  const actionList = document.getElementById('actionList');
-  actionList.innerHTML = '';
-  const allActions = [...workData.actions];
-  currentWeather.conditions.forEach(condition => {
-    const riskData = WEATHER_RISKS[condition];
-    if (riskData) {
-      allActions.push(...riskData.actions);
-    }
-  });
-  const selectedActions = shuffleAndPick(allActions, Math.min(5, allActions.length));
-  selectedActions.forEach(text => {
-    const li = document.createElement('li');
-    li.textContent = text;
-    actionList.appendChild(li);
-  });
-
-  // 安全目標
-  const goalText = document.getElementById('goalText');
-  let goalPool = [...SAFETY_GOALS.default];
-  currentWeather.conditions.forEach(condition => {
-    if (SAFETY_GOALS[condition]) {
-      goalPool = [...SAFETY_GOALS[condition], ...goalPool];
-    }
-  });
-  goalText.textContent = goalPool[Math.floor(Math.random() * goalPool.length)];
-
-  // スクロール
-  setTimeout(() => {
-    resultCard.scrollIntoView({ behavior: 'smooth', block: 'start' });
-  }, 100);
 }
 
-// --- ユーティリティ：配列からランダムに指定数を抽出 ---
-function shuffleAndPick(arr, count) {
-  const shuffled = [...arr].sort(() => Math.random() - 0.5);
-  return shuffled.slice(0, count);
+// ================================
+// Claude API呼び出し
+// ================================
+
+async function callClaudeApi(prompt) {
+  const response = await fetch('https://api.anthropic.com/v1/messages', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'x-api-key': apiKey,
+      'anthropic-version': '2023-06-01',
+      'anthropic-dangerous-direct-browser-access': 'true',
+    },
+    body: JSON.stringify({
+      model: 'claude-haiku-3-5',
+      max_tokens: 1024,
+      messages: [
+        { role: 'user', content: prompt },
+      ],
+    }),
+  });
+
+  if (!response.ok) {
+    const err = await response.json().catch(() => ({}));
+    throw new Error(err.error?.message || `HTTP ${response.status}`);
+  }
+
+  const data = await response.json();
+  return data.content[0].text;
 }
 
-// --- アクションボタン ---
-function initActionButtons() {
-  // コピーボタン
+// ================================
+// KYアクションボタン
+// ================================
+
+function initKyActionButtons() {
   document.getElementById('copyBtn').addEventListener('click', () => {
-    const text = generateCopyText();
+    const text = generateKyCopyText();
     navigator.clipboard.writeText(text).then(() => {
       const btn = document.getElementById('copyBtn');
       btn.textContent = '✅ コピーしました！';
@@ -1269,21 +1524,24 @@ function initActionButtons() {
     });
   });
 
-  // リセットボタン
-  document.getElementById('resetBtn').addEventListener('click', () => {
-    document.getElementById('resultCard').classList.add('hidden');
-    generateKY();
-    setTimeout(() => {
-      document.getElementById('resultCard').classList.remove('hidden');
-    }, 100);
+  document.getElementById('printBtn').addEventListener('click', () => {
+    window.print();
+  });
+
+  document.getElementById('resetBtn').addEventListener('click', async () => {
+    if (useAi && apiKey) {
+      await generateKyWithAi();
+    } else {
+      generateKyTemplate();
+    }
   });
 }
 
-// --- コピー用テキスト生成 ---
-function generateCopyText() {
-  const now = new Date();
-  const dateStr = `${now.getFullYear()}/${now.getMonth() + 1}/${now.getDate()}`;
+function generateKyCopyText() {
   const workData = WORK_DANGERS[selectedWork];
+  const forecast = weeklyForecasts[selectedDateIndex];
+  const targetDate = forecast ? forecast.date : new Date();
+  const dateStr = `${targetDate.getFullYear()}/${targetDate.getMonth() + 1}/${targetDate.getDate()}`;
 
   let text = `【本日のKY活動シート】\n`;
   text += `日付: ${dateStr}\n`;
@@ -1310,4 +1568,303 @@ function generateCopyText() {
   text += document.getElementById('goalText').textContent;
 
   return text;
+}
+
+// ================================
+// 新規入場者教育パネル
+// ================================
+
+function initEducationPanel() {
+  const projectInput = document.getElementById('eduProjectName');
+  const workInput = document.getElementById('eduWorkContent');
+  const generateBtn = document.getElementById('eduGenerateBtn');
+  const note = document.getElementById('eduGenerateNote');
+
+  const checkEduInputs = () => {
+    const ok = projectInput.value.trim() && workInput.value.trim();
+    generateBtn.disabled = !ok;
+    note.textContent = ok
+      ? (useAi && apiKey ? '🤖 AIで生成します' : 'テンプレートで生成します')
+      : '工事名と作業内容を入力してください';
+  };
+
+  projectInput.addEventListener('input', checkEduInputs);
+  workInput.addEventListener('input', checkEduInputs);
+
+  generateBtn.addEventListener('click', async () => {
+    if (useAi && apiKey) {
+      await generateEducationWithAi();
+    } else {
+      generateEducationTemplate();
+    }
+  });
+
+  document.getElementById('eduCopyBtn').addEventListener('click', () => {
+    const text = document.getElementById('eduResultBody').innerText;
+    navigator.clipboard.writeText(text).then(() => {
+      const btn = document.getElementById('eduCopyBtn');
+      btn.textContent = '✅ コピーしました！';
+      btn.classList.add('copied');
+      setTimeout(() => {
+        btn.textContent = '📋 テキストコピー';
+        btn.classList.remove('copied');
+      }, 2000);
+    });
+  });
+
+  document.getElementById('eduPrintBtn').addEventListener('click', () => window.print());
+}
+
+async function generateEducationWithAi() {
+  const projectName = document.getElementById('eduProjectName').value.trim();
+  const workContent = document.getElementById('eduWorkContent').value.trim();
+  const specialNotes = document.getElementById('eduSpecialNotes').value.trim();
+
+  const resultCard = document.getElementById('eduResultCard');
+  const loading = document.getElementById('eduLoading');
+  const body = document.getElementById('eduResultBody');
+
+  resultCard.classList.remove('hidden');
+  loading.classList.remove('hidden');
+  body.innerHTML = '';
+  document.getElementById('eduResultProject').textContent = `📋 ${projectName}`;
+  resultCard.scrollIntoView({ behavior: 'smooth', block: 'start' });
+
+  const prompt = `あなたは建設業の安全担当者として、新規入場者教育の説明テキストを作成してください。
+
+【工事名】${projectName}
+【作業内容】${workContent}
+${specialNotes ? `【特記事項】${specialNotes}` : ''}
+
+以下の条件で作成してください：
+- 現場で5分程度で読み上げられる量（約800〜1000文字）
+- 新しく入場する作業員向けに、現場のルールとリスクを分かりやすく説明する
+- 建設業の実務用語を適切に使う
+- 以下の項目を含める：
+  1. 工事概要と注意事項の概要
+  2. 現場のルール（入退場、休憩場所、喫煙場所など）
+  3. この工事特有の危険箇所・リスク
+  4. 必須保護具の着用について
+  5. 緊急時の対応（連絡先・避難場所）
+  6. 最後のまとめの一言
+
+見出しを使って読みやすく構成してください。`;
+
+  try {
+    const result = await callClaudeApi(prompt);
+    loading.classList.add('hidden');
+    body.innerHTML = formatProseResult(result);
+  } catch (err) {
+    loading.classList.add('hidden');
+    generateEducationTemplate();
+    showErrorBanner('AI生成に失敗しました。テンプレートで表示しています。');
+  }
+}
+
+function generateEducationTemplate() {
+  const projectName = document.getElementById('eduProjectName').value.trim();
+  const workContent = document.getElementById('eduWorkContent').value.trim();
+  const specialNotes = document.getElementById('eduSpecialNotes').value.trim();
+
+  const resultCard = document.getElementById('eduResultCard');
+  const loading = document.getElementById('eduLoading');
+  const body = document.getElementById('eduResultBody');
+
+  resultCard.classList.remove('hidden');
+  loading.classList.add('hidden');
+  document.getElementById('eduResultProject').textContent = `📋 ${projectName}`;
+  document.getElementById('eduAiBadge').textContent = 'テンプレート生成';
+
+  const text = `【新規入場者教育 説明テキスト】
+工事名：${projectName}
+
+本日は${workContent}の工事現場へようこそ。
+入場にあたり、この現場で守っていただくルールと安全上の注意事項を説明します。
+
+■ 現場のルール
+・入退場は必ず所定のゲートを使用してください。
+・作業開始前にKY活動（危険予知活動）を行います。職長の指示に従ってください。
+・休憩は所定の休憩場所のみで行ってください。
+・喫煙は指定の喫煙場所のみ許可されています。
+
+■ この現場の主な危険箇所
+・${workContent}に関する作業エリアは、特に注意が必要な箇所です。
+・立入禁止区域には絶対に入らないでください。
+・重機の稼働範囲内には無断で立ち入らないでください。
+${specialNotes ? `・特記事項：${specialNotes}` : ''}
+
+■ 必須保護具について
+・保護帽・安全靴・安全帯（高所作業時）は必ず着用してください。
+・作業内容に応じた保護具（保護メガネ、防じんマスクなど）を着用してください。
+
+■ 緊急時の対応
+・事故・けがが発生した場合は、直ちに作業を停止し、職長に報告してください。
+・避難経路を事前に確認してください。
+・緊急連絡先は現場事務所に掲示しています。
+
+以上のルールを守り、安全に作業をお願いします。
+本日の作業、よろしくお願いします。`;
+
+  body.innerHTML = formatProseResult(text);
+  resultCard.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+// ================================
+// 安全朝礼スピーチパネル
+// ================================
+
+function initSpeechPanel() {
+  const workInput = document.getElementById('speechWorkContent');
+  const generateBtn = document.getElementById('speechGenerateBtn');
+  const note = document.getElementById('speechGenerateNote');
+
+  workInput.addEventListener('input', () => {
+    const ok = workInput.value.trim();
+    generateBtn.disabled = !ok;
+    note.textContent = ok
+      ? (useAi && apiKey ? '🤖 AIで生成します' : 'テンプレートで生成します')
+      : '今日の作業内容を入力してください';
+  });
+
+  generateBtn.addEventListener('click', async () => {
+    if (useAi && apiKey) {
+      await generateSpeechWithAi();
+    } else {
+      generateSpeechTemplate();
+    }
+  });
+
+  document.getElementById('speechCopyBtn').addEventListener('click', () => {
+    const text = document.getElementById('speechResultBody').innerText;
+    navigator.clipboard.writeText(text).then(() => {
+      const btn = document.getElementById('speechCopyBtn');
+      btn.textContent = '✅ コピーしました！';
+      btn.classList.add('copied');
+      setTimeout(() => {
+        btn.textContent = '📋 テキストコピー';
+        btn.classList.remove('copied');
+      }, 2000);
+    });
+  });
+
+  document.getElementById('speechPrintBtn').addEventListener('click', () => window.print());
+}
+
+async function generateSpeechWithAi() {
+  const workContent = document.getElementById('speechWorkContent').value.trim();
+  const weather = document.getElementById('speechWeather').value.trim();
+  const notes = document.getElementById('speechNotes').value.trim();
+
+  const resultCard = document.getElementById('speechResultCard');
+  const loading = document.getElementById('speechLoading');
+  const body = document.getElementById('speechResultBody');
+
+  resultCard.classList.remove('hidden');
+  loading.classList.remove('hidden');
+  body.innerHTML = '';
+  resultCard.scrollIntoView({ behavior: 'smooth', block: 'start' });
+
+  const prompt = `あなたは建設現場の職長です。本日の安全朝礼スピーチを作成してください。
+
+【今日の作業】${workContent}
+${weather ? `【今日の天気・気温】${weather}` : ''}
+${notes ? `【特に伝えたい注意事項】${notes}` : ''}
+
+以下の条件で作成してください：
+- 1〜2分で読めるスピーチ文（400〜600文字程度）
+- 職長が朝礼で実際に話す口調で書く（「おはようございます。」から始める）
+- 今日の作業のリスクと対策を具体的に伝える
+- 天気・気象条件に関するリスクも含める（天気入力がある場合）
+- 最後は全員で唱和できる安全目標で締める（「ゼロ災でいこう！ ヨシ！」など）
+- 形式的でなく、その現場のリアルなスピーチにする`;
+
+  try {
+    const result = await callClaudeApi(prompt);
+    loading.classList.add('hidden');
+    body.innerHTML = formatProseResult(result);
+  } catch (err) {
+    loading.classList.add('hidden');
+    generateSpeechTemplate();
+    showErrorBanner('AI生成に失敗しました。テンプレートで表示しています。');
+  }
+}
+
+function generateSpeechTemplate() {
+  const workContent = document.getElementById('speechWorkContent').value.trim();
+  const weather = document.getElementById('speechWeather').value.trim();
+  const notes = document.getElementById('speechNotes').value.trim();
+
+  const resultCard = document.getElementById('speechResultCard');
+  const loading = document.getElementById('speechLoading');
+  const body = document.getElementById('speechResultBody');
+
+  resultCard.classList.remove('hidden');
+  loading.classList.add('hidden');
+  document.getElementById('speechAiBadge').textContent = 'テンプレート生成';
+
+  const weatherLine = weather ? `本日の天気は${weather}です。気象条件に合わせた対策を取ってください。` : '';
+  const notesLine = notes ? `特に注意していただきたい点として、${notes}` : '';
+
+  const text = `おはようございます。
+
+本日も朝礼を始めます。
+
+本日の作業は、${workContent}です。
+${weatherLine}
+
+作業を始める前に、今日の危険ポイントを確認します。
+まず、作業エリアの整理整頓と通路の確保を行ってください。
+保護具（保護帽・安全靴・安全帯）は必ず着用してから作業を開始してください。
+重機が稼働する場合は、誘導員の指示に従い、旋回範囲内には立ち入らないでください。
+${notesLine}
+
+また、体調不良を感じた場合は、無理をせず、すぐに職長に申告してください。
+
+それでは、本日の安全目標を唱和して、作業を開始しましょう。
+
+「今日も一日、ゼロ災でいこう！ ヨシ！」
+
+以上で朝礼を終わります。安全第一で、よろしくお願いします。`;
+
+  body.innerHTML = formatProseResult(text);
+  resultCard.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+// ================================
+// ユーティリティ
+// ================================
+
+function shuffleAndPick(arr, count) {
+  const shuffled = [...arr].sort(() => Math.random() - 0.5);
+  return shuffled.slice(0, count);
+}
+
+function formatProseResult(text) {
+  // テキストをHTMLに変換（改行→<br>、見出し→<strong>）
+  return text
+    .split('\n')
+    .map(line => {
+      const trimmed = line.trim();
+      if (!trimmed) return '<br>';
+      if (trimmed.startsWith('■') || trimmed.startsWith('【') || trimmed.startsWith('#')) {
+        return `<p class="prose-heading">${escapeHtml(trimmed)}</p>`;
+      }
+      return `<p>${escapeHtml(trimmed)}</p>`;
+    })
+    .join('');
+}
+
+function escapeHtml(str) {
+  return str
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
+}
+
+function showErrorBanner(message) {
+  const banner = document.createElement('div');
+  banner.className = 'error-banner';
+  banner.textContent = message;
+  document.querySelector('.main').prepend(banner);
+  setTimeout(() => banner.remove(), 5000);
 }

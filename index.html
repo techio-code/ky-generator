@@ -11,309 +11,475 @@
   </script>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>現場KYジェネレーター｜天気連動型 危険予知活動</title>
-  <meta name="description" content="天気に応じた危険予知活動を自動生成。気象庁APIと連動して、雨・猛暑・強風など現場のリスクを可視化します。">
+  <title>建設業AI安全書類ジェネレーター｜KYシート・朝礼・新規入場者教育</title>
+  <meta name="description" content="AIがKYシート・安全朝礼スピーチ・新規入場者教育テキストを自動生成。天気連動で現場のリスクを正確に可視化。建設業の職長・安全担当者向け無料ツール。">
+  <meta property="og:title" content="建設業AI安全書類ジェネレーター">
+  <meta property="og:description" content="AIがKYシート・安全朝礼・新規入場者教育を自動生成。現場の実務に即した本格的な安全書類をワンクリックで。">
+  <meta property="og:type" content="website">
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>⚠️</text></svg>">
   <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;700;900&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
+
+  <!-- APIキー入力モーダル -->
+  <div class="modal-overlay hidden" id="apiKeyModal">
+    <div class="modal-box">
+      <div class="modal-icon">🤖</div>
+      <h2 class="modal-title">AI生成を使うにはAPIキーが必要です</h2>
+      <p class="modal-desc">
+        Claude APIキーを入力すると、AIが現場の実務に即した本格的な安全書類を生成します。<br>
+        キーはブラウザにのみ保存され、外部に送信されることはありません。
+      </p>
+      <div class="modal-input-wrap">
+        <input type="password" id="apiKeyInput" placeholder="sk-ant-api03-..." class="modal-input">
+        <button class="modal-toggle-btn" id="toggleApiKey" type="button">表示</button>
+      </div>
+      <p class="modal-hint">APIキーは <a href="https://console.anthropic.com/" target="_blank">console.anthropic.com</a> で取得できます</p>
+      <div class="modal-btns">
+        <button class="modal-btn-primary" id="saveApiKey">AIで使う</button>
+        <button class="modal-btn-secondary" id="skipApiKey">テンプレートで使う（API不要）</button>
+      </div>
+    </div>
+  </div>
+
   <!-- ヘッダー -->
   <header class="header">
     <div class="header-inner">
       <div class="logo">
         <span class="logo-icon">⚠️</span>
-        <h1>現場KYジェネレーター</h1>
+        <h1>建設業AI安全書類ジェネレーター</h1>
       </div>
-      <p class="header-sub">天気連動型 危険予知活動シート自動生成</p>
+      <p class="header-sub">KYシート・朝礼スピーチ・新規入場者教育を自動生成</p>
+      <div class="header-api-status">
+        <span class="api-badge" id="apiBadge">テンプレートモード</span>
+        <button class="api-change-btn" id="changeApiKey">APIキー変更</button>
+      </div>
     </div>
   </header>
 
+  <!-- 書類タブ -->
+  <div class="doc-tabs-wrap">
+    <div class="doc-tabs">
+      <button class="doc-tab active" data-doc="ky">
+        <span class="doc-tab-icon">📋</span>
+        <span class="doc-tab-label">KYシート</span>
+      </button>
+      <button class="doc-tab" data-doc="education">
+        <span class="doc-tab-icon">📚</span>
+        <span class="doc-tab-label">新規入場者教育</span>
+      </button>
+      <button class="doc-tab" data-doc="speech">
+        <span class="doc-tab-icon">📣</span>
+        <span class="doc-tab-label">安全朝礼スピーチ</span>
+      </button>
+    </div>
+  </div>
+
   <!-- メインコンテンツ -->
   <main class="main">
-    <!-- STEP 1: 地域選択 -->
-    <section class="step-card" id="step1">
-      <div class="step-badge">STEP 1</div>
-      <h2 class="step-title">📍 現場の地域を選択</h2>
-      <div class="select-wrapper">
-        <select id="regionSelect">
-          <option value="">-- 地域を選んでください --</option>
-        </select>
-      </div>
-      <!-- 日付選択 -->
-      <div id="dateSelector" class="date-selector hidden">
-        <p class="date-label">📅 日付を選択</p>
-        <div class="date-grid" id="dateGrid"></div>
-      </div>
 
-      <div id="weatherDisplay" class="weather-display hidden">
-        <div class="weather-loading hidden" id="weatherLoading">
-          <div class="spinner"></div>
-          <span>天気情報を取得中...</span>
+    <!-- ========== KYシートパネル ========== -->
+    <div class="doc-panel active" id="panel-ky">
+
+      <!-- STEP 1: 地域選択 -->
+      <section class="step-card" id="step1">
+        <div class="step-badge">STEP 1</div>
+        <h2 class="step-title">📍 現場の地域を選択</h2>
+        <div class="select-wrapper">
+          <select id="regionSelect">
+            <option value="">-- 地域を選んでください --</option>
+          </select>
         </div>
-        <div class="weather-info hidden" id="weatherInfo">
-          <div class="weather-main">
-            <span class="weather-icon" id="weatherIcon">☀️</span>
-            <div>
-              <p class="weather-text" id="weatherText">--</p>
-              <p class="weather-temp" id="weatherTemp">--</p>
+        <!-- 日付選択 -->
+        <div id="dateSelector" class="date-selector hidden">
+          <p class="date-label">📅 日付を選択</p>
+          <div class="date-grid" id="dateGrid"></div>
+        </div>
+
+        <div id="weatherDisplay" class="weather-display hidden">
+          <div class="weather-loading hidden" id="weatherLoading">
+            <div class="spinner"></div>
+            <span>天気情報を取得中...</span>
+          </div>
+          <div class="weather-info hidden" id="weatherInfo">
+            <div class="weather-main">
+              <span class="weather-icon" id="weatherIcon">☀️</span>
+              <div>
+                <p class="weather-text" id="weatherText">--</p>
+                <p class="weather-temp" id="weatherTemp">--</p>
+              </div>
+            </div>
+            <div class="weather-tags" id="weatherTags"></div>
+          </div>
+          <div class="weather-error hidden" id="weatherError">
+            <p>⚠️ 天気情報の取得に失敗しました</p>
+          </div>
+        </div>
+      </section>
+
+      <!-- STEP 2: 作業内容選択 -->
+      <section class="step-card" id="step2">
+        <div class="step-badge">STEP 2</div>
+        <h2 class="step-title">🔧 今日の作業内容を選択</h2>
+        <!-- カテゴリタブ -->
+        <div class="category-tabs">
+          <button class="category-tab active" data-category="general">🏢 ゼネコン（元請）</button>
+          <button class="category-tab" data-category="sub">🔧 サブコン（専門工事）</button>
+        </div>
+
+        <!-- ゼネコン作業 -->
+        <div class="work-category" id="category-general">
+          <p class="category-desc">躯体・仮設・管理など元請が主導する作業</p>
+          <h4 class="work-group-title">🔩 躯体工事</h4>
+          <div class="work-grid">
+            <button class="work-btn" data-work="concrete">
+              <span class="work-icon">🧱</span>
+              <span class="work-name">コンクリート打設</span>
+            </button>
+            <button class="work-btn" data-work="formwork">
+              <span class="work-icon">📐</span>
+              <span class="work-name">型枠工事</span>
+            </button>
+            <button class="work-btn" data-work="rebar">
+              <span class="work-icon">🔗</span>
+              <span class="work-name">鉄筋工事</span>
+            </button>
+            <button class="work-btn" data-work="steel">
+              <span class="work-icon">🏗️</span>
+              <span class="work-name">鉄骨建方</span>
+            </button>
+          </div>
+
+          <h4 class="work-group-title">🚧 仮設・土工事</h4>
+          <div class="work-grid">
+            <button class="work-btn" data-work="scaffold">
+              <span class="work-icon">🪜</span>
+              <span class="work-name">足場工事</span>
+            </button>
+            <button class="work-btn" data-work="excavation">
+              <span class="work-icon">⛏️</span>
+              <span class="work-name">掘削・土工事</span>
+            </button>
+            <button class="work-btn" data-work="piling">
+              <span class="work-icon">🔨</span>
+              <span class="work-name">杭打ち工事</span>
+            </button>
+            <button class="work-btn" data-work="demolition">
+              <span class="work-icon">💥</span>
+              <span class="work-name">解体工事</span>
+            </button>
+          </div>
+
+          <h4 class="work-group-title">🏗️ 重機・揚重</h4>
+          <div class="work-grid">
+            <button class="work-btn" data-work="crane">
+              <span class="work-icon">🏗️</span>
+              <span class="work-name">クレーン作業</span>
+            </button>
+            <button class="work-btn" data-work="transport">
+              <span class="work-icon">🚛</span>
+              <span class="work-name">重機・運搬</span>
+            </button>
+            <button class="work-btn" data-work="height">
+              <span class="work-icon">🧗</span>
+              <span class="work-name">高所作業車</span>
+            </button>
+          </div>
+
+          <h4 class="work-group-title">📋 管理・測量</h4>
+          <div class="work-grid">
+            <button class="work-btn" data-work="survey">
+              <span class="work-icon">📏</span>
+              <span class="work-name">測量・墨出し</span>
+            </button>
+            <button class="work-btn" data-work="safety_patrol">
+              <span class="work-icon">👷</span>
+              <span class="work-name">安全巡視</span>
+            </button>
+            <button class="work-btn" data-work="material">
+              <span class="work-icon">📦</span>
+              <span class="work-name">資材搬入・搬出</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- サブコン作業 -->
+        <div class="work-category hidden" id="category-sub">
+          <p class="category-desc">電気・設備・仕上げなど専門工事業者が行う作業</p>
+          <h4 class="work-group-title">⚡ 電気設備工事</h4>
+          <div class="work-grid">
+            <button class="work-btn" data-work="electrical">
+              <span class="work-icon">⚡</span>
+              <span class="work-name">電気配線工事</span>
+            </button>
+            <button class="work-btn" data-work="electrical_panel">
+              <span class="work-icon">🔌</span>
+              <span class="work-name">分電盤・受変電</span>
+            </button>
+            <button class="work-btn" data-work="communication">
+              <span class="work-icon">📡</span>
+              <span class="work-name">通信・弱電工事</span>
+            </button>
+            <button class="work-btn" data-work="lighting">
+              <span class="work-icon">💡</span>
+              <span class="work-name">照明・器具取付</span>
+            </button>
+          </div>
+
+          <h4 class="work-group-title">🔧 機械設備工事</h4>
+          <div class="work-grid">
+            <button class="work-btn" data-work="plumbing">
+              <span class="work-icon">🔧</span>
+              <span class="work-name">給排水配管</span>
+            </button>
+            <button class="work-btn" data-work="hvac">
+              <span class="work-icon">❄️</span>
+              <span class="work-name">空調ダクト工事</span>
+            </button>
+            <button class="work-btn" data-work="fire_protection">
+              <span class="work-icon">🧯</span>
+              <span class="work-name">消防設備工事</span>
+            </button>
+            <button class="work-btn" data-work="welding">
+              <span class="work-icon">🔥</span>
+              <span class="work-name">溶接・溶断</span>
+            </button>
+          </div>
+
+          <h4 class="work-group-title">🎨 仕上げ工事</h4>
+          <div class="work-grid">
+            <button class="work-btn" data-work="painting">
+              <span class="work-icon">🎨</span>
+              <span class="work-name">塗装工事</span>
+            </button>
+            <button class="work-btn" data-work="tiling">
+              <span class="work-icon">🔲</span>
+              <span class="work-name">タイル・左官</span>
+            </button>
+            <button class="work-btn" data-work="interior">
+              <span class="work-icon">🪟</span>
+              <span class="work-name">内装仕上げ</span>
+            </button>
+            <button class="work-btn" data-work="waterproofing">
+              <span class="work-icon">💧</span>
+              <span class="work-name">防水工事</span>
+            </button>
+          </div>
+
+          <h4 class="work-group-title">🏠 外装・屋根</h4>
+          <div class="work-grid">
+            <button class="work-btn" data-work="roofing">
+              <span class="work-icon">🏠</span>
+              <span class="work-name">屋根工事</span>
+            </button>
+            <button class="work-btn" data-work="exterior">
+              <span class="work-icon">🧱</span>
+              <span class="work-name">外壁・ALC工事</span>
+            </button>
+            <button class="work-btn" data-work="glazing">
+              <span class="work-icon">🪟</span>
+              <span class="work-name">サッシ・ガラス</span>
+            </button>
+          </div>
+        </div>
+      </section>
+
+      <!-- STEP 3: KY生成 -->
+      <section class="step-card" id="step3">
+        <div class="step-badge">STEP 3</div>
+        <h2 class="step-title">📋 KY活動シートを生成</h2>
+        <button class="generate-btn" id="generateBtn" disabled>
+          <span class="generate-icon">⚡</span>
+          KY活動シートを生成する
+        </button>
+        <p class="generate-note" id="generateNote">地域と作業内容を選択してください</p>
+      </section>
+
+      <!-- KY結果表示 -->
+      <section class="result-card hidden" id="resultCard">
+        <div class="result-header">
+          <h2 class="result-title">📋 本日のKY活動シート</h2>
+          <div class="result-meta">
+            <span id="resultDate"></span>
+            <span id="resultRegion"></span>
+            <span id="resultWeather"></span>
+            <span class="ai-badge hidden" id="resultAiBadge">🤖 AI生成</span>
+          </div>
+        </div>
+
+        <!-- ローディング -->
+        <div class="ai-loading hidden" id="kyLoading">
+          <div class="ai-spinner"></div>
+          <p class="ai-loading-text">AIが現場のリスクを分析中...</p>
+        </div>
+
+        <!-- 結果本体 -->
+        <div id="kyResultBody">
+          <!-- 天気アラート -->
+          <div class="weather-alert hidden" id="weatherAlert">
+            <div class="alert-icon">🚨</div>
+            <div class="alert-content">
+              <h3 id="alertTitle">天気に関する注意</h3>
+              <p id="alertText"></p>
             </div>
           </div>
-          <div class="weather-tags" id="weatherTags"></div>
-        </div>
-        <div class="weather-error hidden" id="weatherError">
-          <p>⚠️ 天気情報の取得に失敗しました</p>
-        </div>
-      </div>
-    </section>
 
-    <!-- STEP 2: 作業内容選択 -->
-    <section class="step-card" id="step2">
-      <div class="step-badge">STEP 2</div>
-      <h2 class="step-title">🔧 今日の作業内容を選択</h2>
-      <!-- カテゴリタブ -->
-      <div class="category-tabs">
-        <button class="category-tab active" data-category="general">🏢 ゼネコン（元請）</button>
-        <button class="category-tab" data-category="sub">🔧 サブコン（専門工事）</button>
-      </div>
+          <!-- 作業の危険ポイント -->
+          <div class="ky-section">
+            <h3 class="ky-section-title">
+              <span class="ky-badge danger">危険</span>
+              作業に潜む危険ポイント
+            </h3>
+            <ul class="ky-list" id="dangerList"></ul>
+          </div>
 
-      <!-- ゼネコン作業 -->
-      <div class="work-category" id="category-general">
-        <p class="category-desc">躯体・仮設・管理など元請が主導する作業</p>
-        <h4 class="work-group-title">🔩 躯体工事</h4>
-        <div class="work-grid">
-          <button class="work-btn" data-work="concrete">
-            <span class="work-icon">🧱</span>
-            <span class="work-name">コンクリート打設</span>
-          </button>
-          <button class="work-btn" data-work="formwork">
-            <span class="work-icon">📐</span>
-            <span class="work-name">型枠工事</span>
-          </button>
-          <button class="work-btn" data-work="rebar">
-            <span class="work-icon">🔗</span>
-            <span class="work-name">鉄筋工事</span>
-          </button>
-          <button class="work-btn" data-work="steel">
-            <span class="work-icon">🏗️</span>
-            <span class="work-name">鉄骨建方</span>
-          </button>
+          <!-- 天気起因のリスク -->
+          <div class="ky-section">
+            <h3 class="ky-section-title">
+              <span class="ky-badge weather">天気</span>
+              天気に起因するリスク
+            </h3>
+            <ul class="ky-list" id="weatherRiskList"></ul>
+          </div>
+
+          <!-- 対策 -->
+          <div class="ky-section">
+            <h3 class="ky-section-title">
+              <span class="ky-badge action">対策</span>
+              本日の重点対策
+            </h3>
+            <ul class="ky-list action-list" id="actionList"></ul>
+          </div>
+
+          <!-- 本日の安全目標 -->
+          <div class="safety-goal">
+            <h3>🎯 本日の安全目標</h3>
+            <p class="goal-text" id="goalText"></p>
+          </div>
         </div>
 
-        <h4 class="work-group-title">🚧 仮設・土工事</h4>
-        <div class="work-grid">
-          <button class="work-btn" data-work="scaffold">
-            <span class="work-icon">🪜</span>
-            <span class="work-name">足場工事</span>
-          </button>
-          <button class="work-btn" data-work="excavation">
-            <span class="work-icon">⛏️</span>
-            <span class="work-name">掘削・土工事</span>
-          </button>
-          <button class="work-btn" data-work="piling">
-            <span class="work-icon">🔨</span>
-            <span class="work-name">杭打ち工事</span>
-          </button>
-          <button class="work-btn" data-work="demolition">
-            <span class="work-icon">💥</span>
-            <span class="work-name">解体工事</span>
-          </button>
+        <!-- アクションボタン -->
+        <div class="result-actions">
+          <button class="action-btn copy-btn" id="copyBtn">📋 テキストコピー</button>
+          <button class="action-btn print-btn" id="printBtn">🖨️ 印刷</button>
+          <button class="action-btn reset-btn" id="resetBtn">🔄 再生成</button>
+        </div>
+      </section>
+    </div>
+
+    <!-- ========== 新規入場者教育パネル ========== -->
+    <div class="doc-panel hidden" id="panel-education">
+      <section class="step-card">
+        <div class="step-badge">入力</div>
+        <h2 class="step-title">📚 新規入場者教育テキスト生成</h2>
+        <p class="form-desc">工事概要と注意事項を入力すると、AIが5分程度で読み上げられる教育テキストを生成します。</p>
+
+        <div class="form-group">
+          <label class="form-label" for="eduProjectName">工事名 <span class="required">必須</span></label>
+          <input type="text" id="eduProjectName" class="form-input" placeholder="例：○○ビル新築工事">
         </div>
 
-        <h4 class="work-group-title">🏗️ 重機・揚重</h4>
-        <div class="work-grid">
-          <button class="work-btn" data-work="crane">
-            <span class="work-icon">🏗️</span>
-            <span class="work-name">クレーン作業</span>
-          </button>
-          <button class="work-btn" data-work="transport">
-            <span class="work-icon">🚛</span>
-            <span class="work-name">重機・運搬</span>
-          </button>
-          <button class="work-btn" data-work="height">
-            <span class="work-icon">🧗</span>
-            <span class="work-name">高所作業車</span>
-          </button>
+        <div class="form-group">
+          <label class="form-label" for="eduWorkContent">主な作業内容 <span class="required">必須</span></label>
+          <input type="text" id="eduWorkContent" class="form-input" placeholder="例：鉄筋コンクリート造 地上10階建て 躯体工事">
         </div>
 
-        <h4 class="work-group-title">📋 管理・測量</h4>
-        <div class="work-grid">
-          <button class="work-btn" data-work="survey">
-            <span class="work-icon">📏</span>
-            <span class="work-name">測量・墨出し</span>
-          </button>
-          <button class="work-btn" data-work="safety_patrol">
-            <span class="work-icon">👷</span>
-            <span class="work-name">安全巡視</span>
-          </button>
-          <button class="work-btn" data-work="material">
-            <span class="work-icon">📦</span>
-            <span class="work-name">資材搬入・搬出</span>
-          </button>
-        </div>
-      </div>
-
-      <!-- サブコン作業 -->
-      <div class="work-category hidden" id="category-sub">
-        <p class="category-desc">電気・設備・仕上げなど専門工事業者が行う作業</p>
-        <h4 class="work-group-title">⚡ 電気設備工事</h4>
-        <div class="work-grid">
-          <button class="work-btn" data-work="electrical">
-            <span class="work-icon">⚡</span>
-            <span class="work-name">電気配線工事</span>
-          </button>
-          <button class="work-btn" data-work="electrical_panel">
-            <span class="work-icon">🔌</span>
-            <span class="work-name">分電盤・受変電</span>
-          </button>
-          <button class="work-btn" data-work="communication">
-            <span class="work-icon">📡</span>
-            <span class="work-name">通信・弱電工事</span>
-          </button>
-          <button class="work-btn" data-work="lighting">
-            <span class="work-icon">💡</span>
-            <span class="work-name">照明・器具取付</span>
-          </button>
+        <div class="form-group">
+          <label class="form-label" for="eduSpecialNotes">特に注意が必要な事項（任意）</label>
+          <textarea id="eduSpecialNotes" class="form-textarea" placeholder="例：近隣に学校があるため騒音・粉じんに特に注意が必要。地下工事を含むため墜落・崩壊リスクが高い。"></textarea>
         </div>
 
-        <h4 class="work-group-title">🔧 機械設備工事</h4>
-        <div class="work-grid">
-          <button class="work-btn" data-work="plumbing">
-            <span class="work-icon">🔧</span>
-            <span class="work-name">給排水配管</span>
-          </button>
-          <button class="work-btn" data-work="hvac">
-            <span class="work-icon">❄️</span>
-            <span class="work-name">空調ダクト工事</span>
-          </button>
-          <button class="work-btn" data-work="fire_protection">
-            <span class="work-icon">🧯</span>
-            <span class="work-name">消防設備工事</span>
-          </button>
-          <button class="work-btn" data-work="welding">
-            <span class="work-icon">🔥</span>
-            <span class="work-name">溶接・溶断</span>
-          </button>
-        </div>
-
-        <h4 class="work-group-title">🎨 仕上げ工事</h4>
-        <div class="work-grid">
-          <button class="work-btn" data-work="painting">
-            <span class="work-icon">🎨</span>
-            <span class="work-name">塗装工事</span>
-          </button>
-          <button class="work-btn" data-work="tiling">
-            <span class="work-icon">🔲</span>
-            <span class="work-name">タイル・左官</span>
-          </button>
-          <button class="work-btn" data-work="interior">
-            <span class="work-icon">🪟</span>
-            <span class="work-name">内装仕上げ</span>
-          </button>
-          <button class="work-btn" data-work="waterproofing">
-            <span class="work-icon">💧</span>
-            <span class="work-name">防水工事</span>
-          </button>
-        </div>
-
-        <h4 class="work-group-title">🏠 外装・屋根</h4>
-        <div class="work-grid">
-          <button class="work-btn" data-work="roofing">
-            <span class="work-icon">🏠</span>
-            <span class="work-name">屋根工事</span>
-          </button>
-          <button class="work-btn" data-work="exterior">
-            <span class="work-icon">🧱</span>
-            <span class="work-name">外壁・ALC工事</span>
-          </button>
-          <button class="work-btn" data-work="glazing">
-            <span class="work-icon">🪟</span>
-            <span class="work-name">サッシ・ガラス</span>
-          </button>
-        </div>
-      </div>
-    </section>
-
-    <!-- STEP 3: KY生成ボタン -->
-    <section class="step-card" id="step3">
-      <div class="step-badge">STEP 3</div>
-      <h2 class="step-title">📋 KY活動シートを生成</h2>
-      <button class="generate-btn" id="generateBtn" disabled>
-        <span class="generate-icon">⚡</span>
-        KY活動シートを生成する
-      </button>
-      <p class="generate-note" id="generateNote">地域と作業内容を選択してください</p>
-    </section>
-
-    <!-- 結果表示 -->
-    <section class="result-card hidden" id="resultCard">
-      <div class="result-header">
-        <h2 class="result-title">📋 本日のKY活動シート</h2>
-        <div class="result-meta">
-          <span id="resultDate"></span>
-          <span id="resultRegion"></span>
-          <span id="resultWeather"></span>
-        </div>
-      </div>
-
-      <!-- 天気アラート -->
-      <div class="weather-alert hidden" id="weatherAlert">
-        <div class="alert-icon">🚨</div>
-        <div class="alert-content">
-          <h3 id="alertTitle">天気に関する注意</h3>
-          <p id="alertText"></p>
-        </div>
-      </div>
-
-      <!-- 作業の危険ポイント -->
-      <div class="ky-section">
-        <h3 class="ky-section-title">
-          <span class="ky-badge danger">危険</span>
-          作業に潜む危険ポイント
-        </h3>
-        <ul class="ky-list" id="dangerList"></ul>
-      </div>
-
-      <!-- 天気起因のリスク -->
-      <div class="ky-section">
-        <h3 class="ky-section-title">
-          <span class="ky-badge weather">天気</span>
-          天気に起因するリスク
-        </h3>
-        <ul class="ky-list" id="weatherRiskList"></ul>
-      </div>
-
-      <!-- 対策 -->
-      <div class="ky-section">
-        <h3 class="ky-section-title">
-          <span class="ky-badge action">対策</span>
-          本日の重点対策
-        </h3>
-        <ul class="ky-list action-list" id="actionList"></ul>
-      </div>
-
-      <!-- 本日の安全目標 -->
-      <div class="safety-goal">
-        <h3>🎯 本日の安全目標</h3>
-        <p class="goal-text" id="goalText"></p>
-      </div>
-
-      <!-- アクションボタン -->
-      <div class="result-actions">
-        <button class="action-btn copy-btn" id="copyBtn">
-          📋 テキストコピー
+        <button class="generate-btn" id="eduGenerateBtn">
+          <span class="generate-icon">🤖</span>
+          新規入場者教育テキストを生成
         </button>
-        <button class="action-btn reset-btn" id="resetBtn">
-          🔄 もう一度作成
+        <p class="generate-note" id="eduGenerateNote">工事名と作業内容を入力してください</p>
+      </section>
+
+      <!-- 新規入場者教育 結果 -->
+      <section class="result-card hidden" id="eduResultCard">
+        <div class="result-header">
+          <h2 class="result-title">📚 新規入場者教育テキスト</h2>
+          <div class="result-meta">
+            <span id="eduResultProject"></span>
+            <span class="ai-badge" id="eduAiBadge">🤖 AI生成</span>
+          </div>
+        </div>
+
+        <div class="ai-loading hidden" id="eduLoading">
+          <div class="ai-spinner"></div>
+          <p class="ai-loading-text">AIが教育テキストを生成中...</p>
+        </div>
+
+        <div id="eduResultBody" class="prose-result"></div>
+
+        <div class="result-actions">
+          <button class="action-btn copy-btn" id="eduCopyBtn">📋 テキストコピー</button>
+          <button class="action-btn print-btn" id="eduPrintBtn">🖨️ 印刷</button>
+        </div>
+      </section>
+    </div>
+
+    <!-- ========== 安全朝礼スピーチパネル ========== -->
+    <div class="doc-panel hidden" id="panel-speech">
+      <section class="step-card">
+        <div class="step-badge">入力</div>
+        <h2 class="step-title">📣 安全朝礼スピーチ生成</h2>
+        <p class="form-desc">今日の作業と天気を入力すると、AIが1〜2分で読める朝礼スピーチを生成します。</p>
+
+        <div class="form-group">
+          <label class="form-label" for="speechWorkContent">今日の主な作業 <span class="required">必須</span></label>
+          <input type="text" id="speechWorkContent" class="form-input" placeholder="例：3階スラブのコンクリート打設、型枠解体">
+        </div>
+
+        <div class="form-group">
+          <label class="form-label" for="speechWeather">今日の天気・気温</label>
+          <input type="text" id="speechWeather" class="form-input" placeholder="例：晴れ、最高気温35℃（猛暑日）">
+        </div>
+
+        <div class="form-group">
+          <label class="form-label" for="speechNotes">特に伝えたい注意事項（任意）</label>
+          <textarea id="speechNotes" class="form-textarea" placeholder="例：昨日、隣接作業場で落下物事故が発生。頭上注意を徹底すること。"></textarea>
+        </div>
+
+        <button class="generate-btn" id="speechGenerateBtn">
+          <span class="generate-icon">🤖</span>
+          安全朝礼スピーチを生成
         </button>
-      </div>
-    </section>
+        <p class="generate-note" id="speechGenerateNote">今日の作業内容を入力してください</p>
+      </section>
+
+      <!-- 安全朝礼スピーチ 結果 -->
+      <section class="result-card hidden" id="speechResultCard">
+        <div class="result-header">
+          <h2 class="result-title">📣 本日の安全朝礼スピーチ</h2>
+          <div class="result-meta">
+            <span class="ai-badge" id="speechAiBadge">🤖 AI生成</span>
+          </div>
+        </div>
+
+        <div class="ai-loading hidden" id="speechLoading">
+          <div class="ai-spinner"></div>
+          <p class="ai-loading-text">AIがスピーチを生成中...</p>
+        </div>
+
+        <div id="speechResultBody" class="prose-result"></div>
+
+        <div class="result-actions">
+          <button class="action-btn copy-btn" id="speechCopyBtn">📋 テキストコピー</button>
+          <button class="action-btn print-btn" id="speechPrintBtn">🖨️ 印刷</button>
+        </div>
+      </section>
+    </div>
+
   </main>
 
   <!-- フッター -->
   <footer class="footer">
-    <p>現場KYジェネレーター｜気象庁API連動</p>
+    <p>建設業AI安全書類ジェネレーター</p>
     <p class="footer-note">※ 天気データは気象庁の公開情報を利用しています</p>
+    <p class="footer-note">※ AI生成はAnthropic Claude APIを使用しています（APIキーはお客様負担）</p>
     <p class="footer-credit">© 2026 てちお｜<a href="https://techio-code.github.io/techio-portfolio/" target="_blank">Portfolio</a></p>
   </footer>
 
