@@ -236,6 +236,11 @@ body {
   color: white;
 }
 
+.api-badge.badge-free {
+  background: var(--action);
+  color: white;
+}
+
 .api-change-btn {
   font-size: 11px;
   font-family: 'Noto Sans JP', sans-serif;

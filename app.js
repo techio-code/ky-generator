@@ -1,6 +1,6 @@
 // ================================
-// 建設業AI安全書類ジェネレーター
-// Claude API連動 + 気象庁API連動
+// 建設業安全書類ジェネレーター
+// テンプレートベース + 気象庁API連動
 // ================================
 
 // --- 都道府県コード一覧 ---
@@ -54,7 +54,7 @@ const REGIONS = [
   { code: '471000', name: '沖縄県' },
 ];
 
-// --- 作業ごとの危険ポイント（テンプレートフォールバック用） ---
+// --- 作業ごとの危険ポイント ---
 const WORK_DANGERS = {
   scaffold: {
     name: '足場作業',
@@ -745,19 +745,82 @@ const SAFETY_GOALS = {
   ],
 };
 
+// --- 作業種別ごとの新規入場者教育注意事項 ---
+const EDU_NOTES = {
+  scaffold: [
+    '足場の組立・解体・変更は、足場組立等作業主任者の指揮のもとで行います',
+    '足場上での作業は、墜落制止用器具（安全帯）を必ず使用してください',
+    '足場板の隙間・段差・手すりの有無を作業前に確認してください',
+    '昇降時は三点支持（両手・両足のいずれか3点を常に保持）を徹底してください',
+    '工具・資材の落下防止措置を必ず実施してください',
+  ],
+  height: [
+    '2m以上の高所作業では、墜落制止用器具の使用が法令で義務づけられています',
+    '開口部・端部には手すりまたは覆いが設置されているか確認してください',
+    '高所作業車を使用する場合は、作業前点検を実施してください',
+    '強風時（10m/s以上）は高所作業を中止します',
+    '工具にはストラップを付け、落下防止措置を行ってください',
+  ],
+  excavation: [
+    '掘削前に必ず埋設物の調査・試掘を実施します',
+    '1.5m以上の掘削箇所には土留めを設置しています。勝手に取り外さないでください',
+    '掘削溝の周囲に設置したバリケードの内側には立ち入らないでください',
+    '重機の旋回範囲内には絶対に立ち入らないでください',
+    '地山の状態（亀裂・湧水・異臭）の異変を感じたら即座に報告してください',
+  ],
+  concrete: [
+    'コンクリート打設時はポンプ車周辺の立入禁止区域を厳守してください',
+    '保護メガネとゴム手袋を必ず着用してください（コンクリートのアルカリ成分は皮膚に有害です）',
+    '打設中の型枠・支保工には触れないでください',
+    'バイブレータ使用時は電気設備の点検を事前に行います',
+    '打設順序・速度は職長の指示に従ってください',
+  ],
+  welding: [
+    '溶接・溶断作業の周囲には防火シートを設置します。火花の飛散範囲内に立ち入らないでください',
+    '遮光面または遮光メガネを着用してください（アーク光は目に重大な障害を与えます）',
+    '換気が不十分な場所での溶接は酸素欠乏・ヒューム中毒の危険があります',
+    'ガスボンベは鎖で固定し、火気から5m以上離れた場所に保管します',
+    '消火器の設置場所を事前に確認してください',
+  ],
+  crane: [
+    '吊荷の真下には絶対に立ち入らないでください',
+    'クレーン作業中は合図者の指示に従って行動してください',
+    '玉掛け作業は有資格者のみが行います',
+    '定格荷重を超える吊り荷は厳禁です',
+    '電線との離隔距離を常に確認してください',
+  ],
+  electrical: [
+    '電気設備には勝手に触れないでください。感電の危険があります',
+    '「通電禁止」の表示がある機器・設備は絶対に操作しないでください',
+    '水気のある場所では特に電気設備への接触に注意してください',
+    '停電中であっても、検電確認なしに作業を始めないでください',
+    '電気工事は有資格者のみが行います',
+  ],
+  demolition: [
+    'アスベスト調査を事前に実施しています。白い繊維状の物質を発見したら報告してください',
+    '解体範囲外には立ち入らないでください',
+    '防じんマスク・保護メガネは必ず着用してください',
+    '重機稼働中は安全距離（機械の旋回半径＋2m）を保ってください',
+    '解体材の仮置き場所は職長の指示に従ってください',
+  ],
+  default: [
+    'ヘルメット・安全靴・必要な保護具は常時着用してください',
+    '指定された通路以外は立入禁止です',
+    '作業前にKY活動を必ず実施してください',
+    '不安全行動を発見した場合は、すぐに職長に報告してください',
+    '体調不良を感じた場合は無理せず申告してください',
+  ],
+};
+
 // --- グローバル状態 ---
 let currentWeather = null;
 let selectedWork = null;
 let selectedRegionName = '';
 let weeklyForecasts = [];
 let selectedDateIndex = 0;
-let apiKey = '';
-let useAi = false;
 
 // --- 初期化 ---
 document.addEventListener('DOMContentLoaded', () => {
-  loadApiKey();
-  initApiKeyModal();
   initDocTabs();
   initRegionSelect();
   initCategoryTabs();
@@ -767,89 +830,6 @@ document.addEventListener('DOMContentLoaded', () => {
   initEducationPanel();
   initSpeechPanel();
 });
-
-// ================================
-// APIキー管理
-// ================================
-
-function loadApiKey() {
-  const saved = localStorage.getItem('ky_claude_api_key');
-  if (saved) {
-    apiKey = saved;
-    useAi = true;
-    updateApiBadge();
-  }
-}
-
-function saveApiKeyToStorage(key) {
-  apiKey = key;
-  useAi = true;
-  localStorage.setItem('ky_claude_api_key', key);
-  updateApiBadge();
-}
-
-function updateApiBadge() {
-  const badge = document.getElementById('apiBadge');
-  if (useAi && apiKey) {
-    badge.textContent = '🤖 AIモード';
-    badge.classList.add('badge-ai');
-  } else {
-    badge.textContent = 'テンプレートモード';
-    badge.classList.remove('badge-ai');
-  }
-}
-
-function initApiKeyModal() {
-  const modal = document.getElementById('apiKeyModal');
-  const input = document.getElementById('apiKeyInput');
-  const toggleBtn = document.getElementById('toggleApiKey');
-  const saveBtn = document.getElementById('saveApiKey');
-  const skipBtn = document.getElementById('skipApiKey');
-  const changeBtn = document.getElementById('changeApiKey');
-
-  // APIキー未保存なら初回モーダルを表示
-  if (!localStorage.getItem('ky_claude_api_key')) {
-    modal.classList.remove('hidden');
-  }
-
-  // パスワード表示切替
-  toggleBtn.addEventListener('click', () => {
-    if (input.type === 'password') {
-      input.type = 'text';
-      toggleBtn.textContent = '隠す';
-    } else {
-      input.type = 'password';
-      toggleBtn.textContent = '表示';
-    }
-  });
-
-  // 保存
-  saveBtn.addEventListener('click', () => {
-    const key = input.value.trim();
-    if (!key || !key.startsWith('sk-ant-')) {
-      input.style.borderColor = '#E53935';
-      input.placeholder = 'sk-ant- で始まるキーを入力してください';
-      return;
-    }
-    saveApiKeyToStorage(key);
-    modal.classList.add('hidden');
-  });
-
-  // スキップ（テンプレートモード）
-  skipBtn.addEventListener('click', () => {
-    useAi = false;
-    modal.classList.add('hidden');
-    updateApiBadge();
-    // スキップ選択をセッション中記憶
-    sessionStorage.setItem('ky_api_skipped', '1');
-  });
-
-  // APIキー変更ボタン
-  changeBtn.addEventListener('click', () => {
-    input.value = apiKey || '';
-    modal.classList.remove('hidden');
-  });
-}
 
 // ================================
 // 書類タブ切替
@@ -870,7 +850,7 @@ function initDocTabs() {
 }
 
 // ================================
-// 気象庁API連携（既存ロジック維持）
+// 気象庁API連携
 // ================================
 
 function initRegionSelect() {
@@ -1211,8 +1191,7 @@ function updateGenerateButton() {
 
   if (currentWeather && selectedWork) {
     btn.disabled = false;
-    const modeText = (useAi && apiKey) ? '🤖 AIで生成します' : 'テンプレートで生成します';
-    note.textContent = `準備OK！ ${modeText}`;
+    note.textContent = '準備OK！ KYシートを生成します';
   } else if (!currentWeather && !selectedWork) {
     note.textContent = '地域と作業内容を選択してください';
   } else if (!currentWeather) {
@@ -1223,180 +1202,14 @@ function updateGenerateButton() {
 }
 
 function initGenerateButton() {
-  document.getElementById('generateBtn').addEventListener('click', async () => {
+  document.getElementById('generateBtn').addEventListener('click', () => {
     if (!currentWeather || !selectedWork) return;
-    if (useAi && apiKey) {
-      await generateKyWithAi();
-    } else {
-      generateKyTemplate();
-    }
-  });
-}
-
-// ================================
-// KY生成 - AI版
-// ================================
-
-async function generateKyWithAi() {
-  const workData = WORK_DANGERS[selectedWork];
-  if (!workData) return;
-
-  const resultCard = document.getElementById('resultCard');
-  resultCard.classList.remove('hidden');
-
-  // ヘッダー情報をセット
-  setKyHeader(workData);
-
-  // ローディング表示
-  document.getElementById('kyLoading').classList.remove('hidden');
-  document.getElementById('kyResultBody').classList.add('hidden');
-  document.getElementById('resultAiBadge').classList.remove('hidden');
-
-  resultCard.scrollIntoView({ behavior: 'smooth', block: 'start' });
-
-  const forecast = weeklyForecasts[selectedDateIndex];
-  const weatherSummary = buildWeatherSummary(forecast);
-
-  const prompt = `あなたは建設業の安全管理の専門家です。現場の職長として、本日のKY活動シートを作成してください。
-
-【作業内容】${workData.name}
-【現場の天気・気象条件】${weatherSummary}
-【地域】${selectedRegionName}
-
-以下の形式で出力してください。現場で実際に使う言葉で、具体的に書いてください。専門用語（コンクリ打設、TBM、KYKなど）は積極的に使ってください。形式的な一般論ではなく、この作業と今日の天気に特有のリスクを書いてください。
-
-===危険ポイント===
-1. （危険ポイント1）
-2. （危険ポイント2）
-3. （危険ポイント3）
-4. （危険ポイント4）
-
-===天気リスク===
-1. （天気に起因するリスク1）
-2. （天気に起因するリスク2）
-3. （天気に起因するリスク3）
-
-===重点対策===
-1. （対策1）
-2. （対策2）
-3. （対策3）
-4. （対策4）
-5. （対策5）
-
-===安全目標===
-（本日の安全目標。現場で唱和できる短いフレーズ。「ヨシ！」で締めるもの）
-
-各項目は1〜2行で簡潔に。実務に即した表現で書いてください。`;
-
-  try {
-    const result = await callClaudeApi(prompt);
-    renderKyAiResult(result);
-  } catch (err) {
-    // APIエラー時はテンプレートにフォールバック
-    document.getElementById('kyLoading').classList.add('hidden');
-    document.getElementById('kyResultBody').classList.remove('hidden');
-    document.getElementById('resultAiBadge').classList.add('hidden');
     generateKyTemplate();
-    showErrorBanner('AI生成に失敗しました。テンプレートで表示しています。');
-  }
-}
-
-function buildWeatherSummary(forecast) {
-  if (!forecast) return '不明';
-  const parts = [forecast.weatherText];
-  if (forecast.tempMin !== '--') parts.push(`最低${forecast.tempMin}℃`);
-  if (forecast.tempMax !== '--') parts.push(`最高${forecast.tempMax}℃`);
-  if (forecast.windText) parts.push(forecast.windText);
-  // 天気リスク条件も付与
-  if (currentWeather && currentWeather.conditions.length > 0) {
-    const riskLabels = currentWeather.conditions
-      .filter(c => !['clear', 'cloudy'].includes(c))
-      .map(c => {
-        const labelMap = {
-          rain: '雨天', heavyRain: '大雨', snow: '降雪',
-          wind: '強風', hot: '猛暑（熱中症警戒）', warm: '暑さ注意', cold: '寒冷',
-        };
-        return labelMap[c] || c;
-      });
-    if (riskLabels.length > 0) parts.push(`リスク条件：${riskLabels.join('・')}`);
-  }
-  return parts.join('、');
-}
-
-function renderKyAiResult(text) {
-  document.getElementById('kyLoading').classList.add('hidden');
-  document.getElementById('kyResultBody').classList.remove('hidden');
-
-  // セクションをパース
-  const sections = {
-    dangers: [],
-    weatherRisks: [],
-    actions: [],
-    goal: '',
-  };
-
-  const lines = text.split('\n');
-  let currentSection = null;
-
-  for (const line of lines) {
-    const trimmed = line.trim();
-    if (!trimmed) continue;
-
-    if (trimmed.includes('===危険ポイント===') || trimmed.includes('危険ポイント')) {
-      currentSection = 'dangers';
-      continue;
-    }
-    if (trimmed.includes('===天気リスク===') || trimmed.includes('天気リスク')) {
-      currentSection = 'weatherRisks';
-      continue;
-    }
-    if (trimmed.includes('===重点対策===') || trimmed.includes('重点対策')) {
-      currentSection = 'actions';
-      continue;
-    }
-    if (trimmed.includes('===安全目標===') || trimmed.includes('安全目標')) {
-      currentSection = 'goal';
-      continue;
-    }
-
-    if (currentSection === 'goal') {
-      sections.goal += trimmed + ' ';
-      continue;
-    }
-
-    // 番号付きリストを抽出
-    const matched = trimmed.match(/^[\d]+[.．、。)\s]+(.+)/);
-    if (matched && currentSection) {
-      if (currentSection === 'dangers') sections.dangers.push(matched[1]);
-      else if (currentSection === 'weatherRisks') sections.weatherRisks.push(matched[1]);
-      else if (currentSection === 'actions') sections.actions.push(matched[1]);
-    }
-  }
-
-  // DOM更新
-  renderList('dangerList', sections.dangers);
-  renderList('weatherRiskList', sections.weatherRisks);
-  renderList('actionList', sections.actions);
-
-  const goalEl = document.getElementById('goalText');
-  goalEl.textContent = sections.goal.trim() || '「今日も一日、ゼロ災でいこう！ ヨシ！」';
-
-  // 天気アラートはテンプレート同様に表示
-  renderWeatherAlert();
-}
-
-function renderList(elementId, items) {
-  const el = document.getElementById(elementId);
-  el.innerHTML = '';
-  items.forEach(text => {
-    const li = document.createElement('li');
-    li.textContent = text;
-    el.appendChild(li);
   });
 }
 
 // ================================
-// KY生成 - テンプレート版（フォールバック）
+// KYシート生成（テンプレートベース）
 // ================================
 
 function generateKyTemplate() {
@@ -1407,16 +1220,15 @@ function generateKyTemplate() {
   resultCard.classList.remove('hidden');
   document.getElementById('kyLoading').classList.add('hidden');
   document.getElementById('kyResultBody').classList.remove('hidden');
-  document.getElementById('resultAiBadge').classList.add('hidden');
 
   setKyHeader(workData);
   renderWeatherAlert();
 
-  // 作業の危険ポイント
+  // 作業の危険ポイント（最大4項目）
   const selectedDangers = shuffleAndPick(workData.dangers, Math.min(4, workData.dangers.length));
   renderList('dangerList', selectedDangers);
 
-  // 天気リスク
+  // 天気リスク（最大4項目）
   const allWeatherRisks = [];
   currentWeather.conditions.forEach(condition => {
     const riskData = WEATHER_RISKS[condition];
@@ -1425,7 +1237,7 @@ function generateKyTemplate() {
   const selectedWeatherRisks = shuffleAndPick(allWeatherRisks, Math.min(4, allWeatherRisks.length));
   renderList('weatherRiskList', selectedWeatherRisks);
 
-  // 対策
+  // 対策（作業 + 天気、最大5項目）
   const allActions = [...workData.actions];
   currentWeather.conditions.forEach(condition => {
     const riskData = WEATHER_RISKS[condition];
@@ -1475,35 +1287,14 @@ function renderWeatherAlert() {
   }
 }
 
-// ================================
-// Claude API呼び出し
-// ================================
-
-async function callClaudeApi(prompt) {
-  const response = await fetch('https://api.anthropic.com/v1/messages', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'x-api-key': apiKey,
-      'anthropic-version': '2023-06-01',
-      'anthropic-dangerous-direct-browser-access': 'true',
-    },
-    body: JSON.stringify({
-      model: 'claude-haiku-3-5',
-      max_tokens: 1024,
-      messages: [
-        { role: 'user', content: prompt },
-      ],
-    }),
+function renderList(elementId, items) {
+  const el = document.getElementById(elementId);
+  el.innerHTML = '';
+  items.forEach(text => {
+    const li = document.createElement('li');
+    li.textContent = text;
+    el.appendChild(li);
   });
-
-  if (!response.ok) {
-    const err = await response.json().catch(() => ({}));
-    throw new Error(err.error?.message || `HTTP ${response.status}`);
-  }
-
-  const data = await response.json();
-  return data.content[0].text;
 }
 
 // ================================
@@ -1528,12 +1319,9 @@ function initKyActionButtons() {
     window.print();
   });
 
-  document.getElementById('resetBtn').addEventListener('click', async () => {
-    if (useAi && apiKey) {
-      await generateKyWithAi();
-    } else {
-      generateKyTemplate();
-    }
+  // 再生成ボタン：テンプレートをもう一度実行する
+  document.getElementById('resetBtn').addEventListener('click', () => {
+    generateKyTemplate();
   });
 }
 
@@ -1571,7 +1359,7 @@ function generateKyCopyText() {
 }
 
 // ================================
-// 新規入場者教育パネル
+// 新規入場者教育パネル（テンプレートベース）
 // ================================
 
 function initEducationPanel() {
@@ -1584,19 +1372,15 @@ function initEducationPanel() {
     const ok = projectInput.value.trim() && workInput.value.trim();
     generateBtn.disabled = !ok;
     note.textContent = ok
-      ? (useAi && apiKey ? '🤖 AIで生成します' : 'テンプレートで生成します')
+      ? '入力OK！ 教育テキストを生成します'
       : '工事名と作業内容を入力してください';
   };
 
   projectInput.addEventListener('input', checkEduInputs);
   workInput.addEventListener('input', checkEduInputs);
 
-  generateBtn.addEventListener('click', async () => {
-    if (useAi && apiKey) {
-      await generateEducationWithAi();
-    } else {
-      generateEducationTemplate();
-    }
+  generateBtn.addEventListener('click', () => {
+    generateEducationTemplate();
   });
 
   document.getElementById('eduCopyBtn').addEventListener('click', () => {
@@ -1615,52 +1399,6 @@ function initEducationPanel() {
   document.getElementById('eduPrintBtn').addEventListener('click', () => window.print());
 }
 
-async function generateEducationWithAi() {
-  const projectName = document.getElementById('eduProjectName').value.trim();
-  const workContent = document.getElementById('eduWorkContent').value.trim();
-  const specialNotes = document.getElementById('eduSpecialNotes').value.trim();
-
-  const resultCard = document.getElementById('eduResultCard');
-  const loading = document.getElementById('eduLoading');
-  const body = document.getElementById('eduResultBody');
-
-  resultCard.classList.remove('hidden');
-  loading.classList.remove('hidden');
-  body.innerHTML = '';
-  document.getElementById('eduResultProject').textContent = `📋 ${projectName}`;
-  resultCard.scrollIntoView({ behavior: 'smooth', block: 'start' });
-
-  const prompt = `あなたは建設業の安全担当者として、新規入場者教育の説明テキストを作成してください。
-
-【工事名】${projectName}
-【作業内容】${workContent}
-${specialNotes ? `【特記事項】${specialNotes}` : ''}
-
-以下の条件で作成してください：
-- 現場で5分程度で読み上げられる量（約800〜1000文字）
-- 新しく入場する作業員向けに、現場のルールとリスクを分かりやすく説明する
-- 建設業の実務用語を適切に使う
-- 以下の項目を含める：
-  1. 工事概要と注意事項の概要
-  2. 現場のルール（入退場、休憩場所、喫煙場所など）
-  3. この工事特有の危険箇所・リスク
-  4. 必須保護具の着用について
-  5. 緊急時の対応（連絡先・避難場所）
-  6. 最後のまとめの一言
-
-見出しを使って読みやすく構成してください。`;
-
-  try {
-    const result = await callClaudeApi(prompt);
-    loading.classList.add('hidden');
-    body.innerHTML = formatProseResult(result);
-  } catch (err) {
-    loading.classList.add('hidden');
-    generateEducationTemplate();
-    showErrorBanner('AI生成に失敗しました。テンプレートで表示しています。');
-  }
-}
-
 function generateEducationTemplate() {
   const projectName = document.getElementById('eduProjectName').value.trim();
   const workContent = document.getElementById('eduWorkContent').value.trim();
@@ -1673,44 +1411,84 @@ function generateEducationTemplate() {
   resultCard.classList.remove('hidden');
   loading.classList.add('hidden');
   document.getElementById('eduResultProject').textContent = `📋 ${projectName}`;
-  document.getElementById('eduAiBadge').textContent = 'テンプレート生成';
 
-  const text = `【新規入場者教育 説明テキスト】
+  // 作業内容からキーワードで教育注意事項を選択
+  const noteKey = detectWorkKey(workContent);
+  const specificNotes = EDU_NOTES[noteKey] || EDU_NOTES.default;
+
+  const today = new Date();
+  const dateStr = `${today.getFullYear()}年${today.getMonth() + 1}月${today.getDate()}日`;
+
+  let text = `【新規入場者教育】
 工事名：${projectName}
+日付：${dateStr}
 
-本日は${workContent}の工事現場へようこそ。
-入場にあたり、この現場で守っていただくルールと安全上の注意事項を説明します。
+本日より現場に入場される方に、安全に関する基本事項をご説明します。
 
-■ 現場のルール
-・入退場は必ず所定のゲートを使用してください。
-・作業開始前にKY活動（危険予知活動）を行います。職長の指示に従ってください。
-・休憩は所定の休憩場所のみで行ってください。
-・喫煙は指定の喫煙場所のみ許可されています。
+■ 現場ルール
+・ヘルメット・安全帯・安全靴は常時着用してください
+・指定された通路以外は立入禁止です
+・作業前にKY活動を必ず実施してください
+・不安全行動を発見した場合は、すぐに報告してください
 
-■ この現場の主な危険箇所
-・${workContent}に関する作業エリアは、特に注意が必要な箇所です。
-・立入禁止区域には絶対に入らないでください。
-・重機の稼働範囲内には無断で立ち入らないでください。
-${specialNotes ? `・特記事項：${specialNotes}` : ''}
+■ 本日の作業に関する注意事項
+`;
 
-■ 必須保護具について
-・保護帽・安全靴・安全帯（高所作業時）は必ず着用してください。
-・作業内容に応じた保護具（保護メガネ、防じんマスクなど）を着用してください。
+  specificNotes.forEach((note, i) => {
+    text += `・${note}\n`;
+  });
 
+  if (specialNotes) {
+    text += `\n■ 特記事項\n・${specialNotes}\n`;
+  }
+
+  text += `
 ■ 緊急時の対応
-・事故・けがが発生した場合は、直ちに作業を停止し、職長に報告してください。
-・避難経路を事前に確認してください。
-・緊急連絡先は現場事務所に掲示しています。
+・事故・けがが発生した場合は、直ちに作業を中止し、現場責任者に報告してください
+・救急・警察：119・110
+・現場緊急連絡先は現場事務所に掲示しています
 
-以上のルールを守り、安全に作業をお願いします。
-本日の作業、よろしくお願いします。`;
+以上を守り、本日も安全に作業をお願いします。`;
 
   body.innerHTML = formatProseResult(text);
   resultCard.scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 
+// 作業内容テキストからWORK_DANGERSのキーを推定する
+function detectWorkKey(workContent) {
+  const keywordMap = [
+    { key: 'scaffold', words: ['足場'] },
+    { key: 'height', words: ['高所', '高所作業車'] },
+    { key: 'excavation', words: ['掘削', '土工', '掘り'] },
+    { key: 'concrete', words: ['コンクリート', '打設', 'コンクリ'] },
+    { key: 'welding', words: ['溶接', '溶断'] },
+    { key: 'crane', words: ['クレーン'] },
+    { key: 'electrical', words: ['電気', '配線', '電灯'] },
+    { key: 'demolition', words: ['解体'] },
+    { key: 'painting', words: ['塗装'] },
+    { key: 'transport', words: ['重機', '運搬'] },
+    { key: 'plumbing', words: ['配管', '給排水', '給水', '排水'] },
+    { key: 'roofing', words: ['屋根', '屋上'] },
+    { key: 'formwork', words: ['型枠'] },
+    { key: 'rebar', words: ['鉄筋'] },
+    { key: 'steel', words: ['鉄骨', '建方'] },
+    { key: 'piling', words: ['杭', '杭打ち'] },
+    { key: 'hvac', words: ['空調', 'ダクト'] },
+    { key: 'waterproofing', words: ['防水'] },
+    { key: 'interior', words: ['内装', 'ボード', 'LGS'] },
+    { key: 'exterior', words: ['外壁', 'ALC'] },
+  ];
+
+  for (const entry of keywordMap) {
+    if (entry.words.some(w => workContent.includes(w))) {
+      return entry.key;
+    }
+  }
+  return 'default';
+}
+
 // ================================
-// 安全朝礼スピーチパネル
+// 安全朝礼スピーチパネル（テンプレートベース）
 // ================================
 
 function initSpeechPanel() {
@@ -1722,16 +1500,12 @@ function initSpeechPanel() {
     const ok = workInput.value.trim();
     generateBtn.disabled = !ok;
     note.textContent = ok
-      ? (useAi && apiKey ? '🤖 AIで生成します' : 'テンプレートで生成します')
+      ? '入力OK！ 朝礼スピーチを生成します'
       : '今日の作業内容を入力してください';
   });
 
-  generateBtn.addEventListener('click', async () => {
-    if (useAi && apiKey) {
-      await generateSpeechWithAi();
-    } else {
-      generateSpeechTemplate();
-    }
+  generateBtn.addEventListener('click', () => {
+    generateSpeechTemplate();
   });
 
   document.getElementById('speechCopyBtn').addEventListener('click', () => {
@@ -1750,48 +1524,9 @@ function initSpeechPanel() {
   document.getElementById('speechPrintBtn').addEventListener('click', () => window.print());
 }
 
-async function generateSpeechWithAi() {
-  const workContent = document.getElementById('speechWorkContent').value.trim();
-  const weather = document.getElementById('speechWeather').value.trim();
-  const notes = document.getElementById('speechNotes').value.trim();
-
-  const resultCard = document.getElementById('speechResultCard');
-  const loading = document.getElementById('speechLoading');
-  const body = document.getElementById('speechResultBody');
-
-  resultCard.classList.remove('hidden');
-  loading.classList.remove('hidden');
-  body.innerHTML = '';
-  resultCard.scrollIntoView({ behavior: 'smooth', block: 'start' });
-
-  const prompt = `あなたは建設現場の職長です。本日の安全朝礼スピーチを作成してください。
-
-【今日の作業】${workContent}
-${weather ? `【今日の天気・気温】${weather}` : ''}
-${notes ? `【特に伝えたい注意事項】${notes}` : ''}
-
-以下の条件で作成してください：
-- 1〜2分で読めるスピーチ文（400〜600文字程度）
-- 職長が朝礼で実際に話す口調で書く（「おはようございます。」から始める）
-- 今日の作業のリスクと対策を具体的に伝える
-- 天気・気象条件に関するリスクも含める（天気入力がある場合）
-- 最後は全員で唱和できる安全目標で締める（「ゼロ災でいこう！ ヨシ！」など）
-- 形式的でなく、その現場のリアルなスピーチにする`;
-
-  try {
-    const result = await callClaudeApi(prompt);
-    loading.classList.add('hidden');
-    body.innerHTML = formatProseResult(result);
-  } catch (err) {
-    loading.classList.add('hidden');
-    generateSpeechTemplate();
-    showErrorBanner('AI生成に失敗しました。テンプレートで表示しています。');
-  }
-}
-
 function generateSpeechTemplate() {
   const workContent = document.getElementById('speechWorkContent').value.trim();
-  const weather = document.getElementById('speechWeather').value.trim();
+  const weatherInput = document.getElementById('speechWeather').value.trim();
   const notes = document.getElementById('speechNotes').value.trim();
 
   const resultCard = document.getElementById('speechResultCard');
@@ -1800,34 +1535,85 @@ function generateSpeechTemplate() {
 
   resultCard.classList.remove('hidden');
   loading.classList.add('hidden');
-  document.getElementById('speechAiBadge').textContent = 'テンプレート生成';
 
-  const weatherLine = weather ? `本日の天気は${weather}です。気象条件に合わせた対策を取ってください。` : '';
-  const notesLine = notes ? `特に注意していただきたい点として、${notes}` : '';
+  // 日付・曜日を取得
+  const today = new Date();
+  const dayNames = ['日', '月', '火', '水', '木', '金', '土'];
+  const dateLabel = `${today.getMonth() + 1}月${today.getDate()}日（${dayNames[today.getDay()]}）`;
 
-  const text = `おはようございます。
+  // 天気に応じた注意文
+  const weatherNote = buildWeatherNote(weatherInput);
 
-本日も朝礼を始めます。
+  // 作業種別の危険ポイント（最大3項目）
+  const workKey = detectWorkKey(workContent);
+  const workData = WORK_DANGERS[workKey];
+  const dangerPoints = workData
+    ? shuffleAndPick(workData.dangers, 3)
+    : ['作業エリアの整理整頓を行う', '保護具の着用を確認する', '重機・車両との接触に注意する'];
 
-本日の作業は、${workContent}です。
-${weatherLine}
+  // 安全目標
+  const goalPool = [...SAFETY_GOALS.default];
+  const goal = goalPool[Math.floor(Math.random() * goalPool.length)];
 
-作業を始める前に、今日の危険ポイントを確認します。
-まず、作業エリアの整理整頓と通路の確保を行ってください。
-保護具（保護帽・安全靴・安全帯）は必ず着用してから作業を開始してください。
-重機が稼働する場合は、誘導員の指示に従い、旋回範囲内には立ち入らないでください。
-${notesLine}
+  let text = `【安全朝礼】${dateLabel}
 
-また、体調不良を感じた場合は、無理をせず、すぐに職長に申告してください。
+おはようございます。本日もよろしくお願いします。
+`;
 
-それでは、本日の安全目標を唱和して、作業を開始しましょう。
+  if (weatherInput) {
+    text += `\n本日の天気は${weatherInput}です。\n${weatherNote}\n`;
+  }
 
-「今日も一日、ゼロ災でいこう！ ヨシ！」
+  text += `
+本日の作業は「${workContent}」です。
+作業にあたり、以下の点に注意してください。
 
-以上で朝礼を終わります。安全第一で、よろしくお願いします。`;
+`;
+
+  dangerPoints.forEach((point, i) => {
+    text += `${i + 1}. ${point}\n`;
+  });
+
+  if (notes) {
+    text += `\n【特別注意事項】\n${notes}\n`;
+  }
+
+  text += `
+本日の安全目標：${goal}
+
+では安全に作業を進めましょう。以上です。`;
 
   body.innerHTML = formatProseResult(text);
   resultCard.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+// 天気テキストから注意文を生成する
+function buildWeatherNote(weatherInput) {
+  if (!weatherInput) return '';
+  const text = weatherInput;
+
+  if (text.includes('大雨') || text.includes('暴風')) {
+    return '悪天候のため、屋外作業の中止基準を確認し、早めの判断をお願いします。';
+  }
+  if (text.includes('雨') || text.includes('雷')) {
+    return '雨天時は足場・路面が滑りやすくなります。足元に十分注意してください。感電リスクも高まるため、電気設備の取り扱いに注意してください。';
+  }
+  if (text.includes('雪') || text.includes('吹雪') || text.includes('みぞれ')) {
+    return '積雪・凍結による転倒・転落に注意してください。作業前に足場・通路の除雪を行ってください。';
+  }
+  if (text.includes('強風') || text.includes('暴風')) {
+    return '強風時はクレーン作業・高所作業を中止します。資材・養生材の飛散防止措置を確認してください。';
+  }
+  if (text.includes('猛暑') || text.includes('35') || text.includes('36') || text.includes('37') || text.includes('38') || text.includes('39')) {
+    return '猛暑日が予想されます。熱中症に厳重に注意してください。30分に1回を目安に水分・塩分を補給してください。';
+  }
+  if (text.includes('暑') || text.includes('30') || text.includes('31') || text.includes('32') || text.includes('33') || text.includes('34')) {
+    return '気温が高くなる予報です。こまめな水分補給・休憩を徹底し、体調管理に注意してください。';
+  }
+  if (text.includes('寒') || text.includes('氷点') || text.includes('0℃') || text.includes('1℃') || text.includes('2℃')) {
+    return '気温が低く、手がかじかむ恐れがあります。防寒対策を行い、路面の凍結にも注意してください。';
+  }
+  return '天気の急変に備え、作業中も空の状況を確認してください。';
 }
 
 // ================================
@@ -1840,7 +1626,6 @@ function shuffleAndPick(arr, count) {
 }
 
 function formatProseResult(text) {
-  // テキストをHTMLに変換（改行→<br>、見出し→<strong>）
   return text
     .split('\n')
     .map(line => {
@@ -1859,12 +1644,4 @@ function escapeHtml(str) {
     .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;');
-}
-
-function showErrorBanner(message) {
-  const banner = document.createElement('div');
-  banner.className = 'error-banner';
-  banner.textContent = message;
-  document.querySelector('.main').prepend(banner);
-  setTimeout(() => banner.remove(), 5000);
 }
